@@ -1,0 +1,152 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  CUSTOMER
+  BARBER
+  ADMIN
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  phone        String?
+  passwordHash String?
+  role         UserRole @default(CUSTOMER)
+
+  sessions     Session[]
+  appointments Appointment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+model Session {
+  id               String    @id @default(cuid())
+  userId           String
+  refreshTokenHash String
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  userAgent        String?
+  ipAddress        String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model Barber {
+  id           String          @id @default(cuid())
+  name         String          @unique
+  bio          String?
+  imageUrl     String?
+  active       Boolean         @default(true)
+  services     BarberService[] // 1:N
+  workingHours WorkingHours[]
+  timeOff      TimeOff[]
+  appointments Appointment[]
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@map("barbers")
+}
+
+model BarberService {
+  barberId  String
+  serviceId String
+  // N:N
+  barber    Barber  @relation(fields: [barberId], references: [id], onDelete: Cascade)
+  service   Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@id([barberId, serviceId]) //complex primary key excluding duplicates
+  @@index([serviceId])
+  @@map("barber_services")
+}
+
+model WorkingHours {
+  id        String  @id @default(cuid())
+  barberId  String
+  dayOfWeek Int
+  startTime String
+  endTime   String
+  active    Boolean @default(true)
+
+  barber Barber @relation(fields: [barberId], references: [id], onDelete: Cascade)
+
+  @@unique([barberId, dayOfWeek])
+  @@index([barberId])
+  @@map("working_hours")
+}
+
+model TimeOff {
+  id       String   @id @default(cuid())
+  barberId String
+  startsAt DateTime
+  endsAt   DateTime
+  reason   String?
+
+  barber Barber @relation(fields: [barberId], references: [id], onDelete: Cascade)
+
+  @@index([barberId, startsAt, endsAt])
+  @@map("time_off")
+}
+
+model Service {
+  id              String          @id @default(cuid())
+  name            String          @unique
+  description     String?
+  durationMinutes Int
+  price           Decimal         @db.Decimal(10, 2)
+  active          Boolean         @default(true)
+  barbers         BarberService[] // 1:N
+  appointments    Appointment[]
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@map("services")
+}
+
+model Appointment {
+  id         String            @id @default(cuid())
+  customerId String
+  barberId   String
+  serviceId  String
+  startsAt   DateTime
+  endsAt     DateTime
+  status     AppointmentStatus @default(PENDING)
+  notes      String?
+
+  customer User    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  barber   Barber  @relation(fields: [barberId], references: [id])
+  service  Service @relation(fields: [serviceId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([barberId, startsAt])
+  @@index([serviceId])
+  @@map("appointments")
+}
