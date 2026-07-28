@@ -1,0 +1,35 @@
+import { LoaderCircleIcon } from "lucide-react";
+import {
+  Navigate,
+  useLocation,
+} from "react-router-dom";
+import { useAuth } from "./useAuth";
+
+type ProtectedRouteProps = {
+  children: React.ReactNode;
+};
+
+export function ProtectedRoute({children}: ProtectedRouteProps) {
+    const location = useLocation();
+    
+    const {
+        isAuthenticated,
+        isLoading,
+    } = useAuth();
+
+    if (isLoading) {
+        return (
+            <div className="flex min-h-screen items-center justify-center bg-white">
+                <LoaderCircleIcon className="size-7 animate-spin text-orange-500" />
+            </div>
+        );
+    }
+
+    if (!isAuthenticated) {
+        return (
+            <Navigate to="/login" replace state={{from: location.pathname}} />
+        )
+    }
+
+    return children;
+}

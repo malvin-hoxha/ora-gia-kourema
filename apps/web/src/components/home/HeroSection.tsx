@@ -1,4 +1,5 @@
 import { ArrowRightIcon, CalendarDaysIcon, ClockIcon } from "lucide-react";
+import { Link } from "react-router-dom";
 
 export function HeroSection() {
   const stats = [
@@ -56,13 +57,12 @@ export function HeroSection() {
 
         {/* CTAs */}
         <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-          <a
-            href="#booking"
-            className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-orange-500 px-8 py-3.5 text-[15px] font-semibold text-white transition-all hover:bg-orange-600 hover:shadow-[0_8px_24px_rgba(249,115,22,0.32)] sm:w-auto"
+          <Link
+            to="/booking"
+            className="..."
           >
             Κλείσε ραντεβού
-            <ArrowRightIcon className="size-4" />
-          </a>
+          </Link>
 
           <a
             href="#services"

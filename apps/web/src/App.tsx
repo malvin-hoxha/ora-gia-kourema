@@ -6,6 +6,8 @@ import {
 import { HomePage } from "./pages/HomePage";
 import { LoginPage } from "./pages/LoginPage";
 import { RegisterPage } from "./pages/RegisterPage";
+import { ProtectedRoute } from "./auth/ProtectedRoute";
+import { BookingPage } from "./pages/BookingPage";
 
 const App = () => {
   return (
@@ -19,6 +21,15 @@ const App = () => {
         path="/register"
         element={<RegisterPage />}
       />
+
+      <Route
+        path="/booking"
+        element={
+          <ProtectedRoute>
+            <BookingPage />
+          </ProtectedRoute>
+        }
+    />
 
       <Route
         path="*"

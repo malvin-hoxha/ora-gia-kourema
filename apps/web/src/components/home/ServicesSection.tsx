@@ -1,72 +1,23 @@
-import { ArrowRightIcon, Clock3Icon, ScissorsIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+
+import {
+  ArrowRightIcon,
+  Clock3Icon,
+  ScissorsIcon,
+} from "lucide-react";
+import { Link } from "react-router-dom";
+import { useServices } from "../../hooks/useServices";
 
 const currencyFormatter = new Intl.NumberFormat("el-GR", {
   style: "currency",
   currency: "EUR",
 });
 
-type Service = {
-  id: string;
-  name: string;
-  description: string;
-  duration: number;
-  price: number;
-};
-
-type ServicesResponse = {
-  data: Service[];
-};
-
 export function ServicesSection() {
-  const [services, setServices] = useState<Service[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const controller = new AbortController();
-
-    async function loadServices() {
-      try {
-        setIsLoading(true);
-        setError(null);
-
-        const apiUrl = import.meta.env.VITE_API_URL;
-
-        if (!apiUrl) {
-          throw new Error("VITE_API_URL is not configured");
-        }
-
-        const response = await fetch(`${apiUrl}/services`, {
-          signal: controller.signal,
-        });
-
-        if (!response.ok) {
-          throw new Error(`Services request failed: ${response.status}`);
-        }
-
-        const result = (await response.json()) as ServicesResponse;
-        setServices(result.data);
-
-      } catch (error) {
-        if (error instanceof DOMException && error.name === "AbortError") {
-          return;
-        }
-
-        console.error("Failed to load services:", error);
-        setError("Δεν ήταν δυνατή η φόρτωση των υπηρεσιών.");
-      } finally {
-        if (!controller.signal.aborted) {
-          setIsLoading(false);
-        }
-      }
-    }
-     void loadServices();
-
-    return () => {
-      controller.abort();
-    };
-  },  []);
+  const {
+    data: services = [],
+    isPending,
+    isError,
+  } = useServices();
 
   return (
     <section
@@ -95,13 +46,16 @@ export function ServicesSection() {
 
             <h2 className="mt-6 font-serif text-4xl leading-[1.02] tracking-[-0.035em] text-slate-900 sm:text-5xl lg:text-6xl">
               Ό,τι χρειάζεσαι για την καλύτερη εκδοχή του{" "}
-              <span className="italic text-orange-500">στυλ σου.</span>
+              <span className="italic text-orange-500">
+                στυλ σου.
+              </span>
             </h2>
           </div>
 
           <p className="max-w-md text-base leading-7 text-gray-500 sm:text-lg">
-            Επίλεξε την υπηρεσία που σου ταιριάζει και κλείσε online το
-            ραντεβού σου με τον barber που προτιμάς.
+            Επίλεξε την υπηρεσία που σου ταιριάζει και
+            κλείσε online το ραντεβού σου με τον barber
+            που προτιμάς.
           </p>
         </div>
 
@@ -121,69 +75,136 @@ export function ServicesSection() {
           </div>
 
           <div className="bg-[#f7f7f7] p-4 sm:p-6">
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {services.map((service, index) => (
-                <article
-                  key={service.id}
-                  className="group relative flex min-h-[350px] flex-col justify-between overflow-hidden rounded-2xl border border-black/[0.06] bg-white p-6 transition-all duration-300 hover:-translate-y-1 hover:border-orange-200 hover:shadow-[0_16px_45px_rgba(15,23,42,0.09)]"
-                >
-                  {/* Hover glow */}
+            {isPending && (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {[1, 2, 3].map((item) => (
                   <div
-                    aria-hidden="true"
-                    className="pointer-events-none absolute -right-20 -top-20 size-48 rounded-full bg-orange-100/0 blur-3xl transition duration-300 group-hover:bg-orange-100/80"
-                  />
-
-                  <div className="relative">
-                    {/* Card header */}
-                    <div className="flex items-center justify-between gap-4">
-                      <span className="flex size-10 items-center justify-center rounded-full border border-orange-100 bg-orange-50 font-serif text-sm text-orange-600">
-                        {String(index + 1).padStart(2, "0")}
-                      </span>
-
-                      <span className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.06] bg-gray-50 px-3 py-1.5 text-xs font-medium text-gray-500">
-                        <Clock3Icon className="size-3.5 text-orange-500" />
-                        {service.duration} λεπτά
-                      </span>
+                    key={item}
+                    className="min-h-[350px] animate-pulse rounded-2xl border border-black/[0.06] bg-white p-6"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="size-10 rounded-full bg-gray-100" />
+                      <div className="h-7 w-24 rounded-full bg-gray-100" />
                     </div>
 
-                    {/* Icon */}
-                    <div className="mt-10 flex size-12 items-center justify-center rounded-2xl bg-slate-900 text-white transition-colors duration-300 group-hover:bg-orange-500">
-                      <ScissorsIcon className="size-5" />
+                    <div className="mt-10 size-12 rounded-2xl bg-gray-100" />
+
+                    <div className="mt-6 h-8 w-2/3 rounded bg-gray-100" />
+
+                    <div className="mt-4 space-y-2">
+                      <div className="h-4 w-full rounded bg-gray-100" />
+                      <div className="h-4 w-5/6 rounded bg-gray-100" />
+                      <div className="h-4 w-3/5 rounded bg-gray-100" />
                     </div>
 
-                    {/* Service content */}
-                    <h3 className="mt-6 font-serif text-3xl leading-tight tracking-[-0.025em] text-slate-900">
-                      {service.name}
-                    </h3>
+                    <div className="mt-10 flex items-end justify-between border-t border-black/[0.06] pt-5">
+                      <div>
+                        <div className="h-3 w-10 rounded bg-gray-100" />
+                        <div className="mt-2 h-8 w-20 rounded bg-gray-100" />
+                      </div>
 
-                    <p className="mt-4 text-sm leading-6 text-gray-500 sm:text-base sm:leading-7">
-                      {service.description}
-                    </p>
+                      <div className="size-12 rounded-full bg-gray-100" />
+                    </div>
                   </div>
+                ))}
+              </div>
+            )}
 
-                  {/* Price and action */}
-                  <div className="relative mt-10 flex items-end justify-between gap-4 border-t border-black/[0.06] pt-5">
-                    <div>
-                      <p className="text-xs font-medium uppercase tracking-[0.16em] text-gray-400">
-                        Τιμή
-                      </p>
+            {isError && (
+              <div className="rounded-2xl border border-red-100 bg-red-50 px-6 py-10 text-center">
+                <p className="font-medium text-red-700">
+                  Δεν ήταν δυνατή η φόρτωση των υπηρεσιών.
+                </p>
 
-                      <p className="mt-1 font-serif text-3xl tracking-tight text-slate-900">
-                        {currencyFormatter.format(service.price)}
-                      </p>
-                    </div>
+                <p className="mt-2 text-sm text-red-500">
+                  Έλεγξε ότι το API λειτουργεί και προσπάθησε
+                  ξανά.
+                </p>
+              </div>
+            )}
 
-                    <button
-                      type="button"
-                      className="inline-flex size-12 items-center justify-center rounded-full bg-orange-500 text-white shadow-[0_8px_20px_rgba(249,115,22,0.24)] transition-all hover:bg-orange-600 hover:shadow-[0_10px_28px_rgba(249,115,22,0.34)] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
-                      aria-label={`Επιλογή υπηρεσίας ${service.name}`}
+            {!isPending &&
+              !isError &&
+              services.length === 0 && (
+                <div className="rounded-2xl border border-black/[0.06] bg-white px-6 py-10 text-center">
+                  <p className="font-medium text-slate-700">
+                    Δεν υπάρχουν διαθέσιμες υπηρεσίες.
+                  </p>
+                </div>
+              )}
+
+            {!isPending &&
+              !isError &&
+              services.length > 0 && (
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {services.map((service, index) => (
+                    <article
+                      key={service.id}
+                      className="group relative flex min-h-[350px] flex-col justify-between overflow-hidden rounded-2xl border border-black/[0.06] bg-white p-6 transition-all duration-300 hover:-translate-y-1 hover:border-orange-200 hover:shadow-[0_16px_45px_rgba(15,23,42,0.09)]"
                     >
-                      <ArrowRightIcon className="size-4 transition-transform group-hover:translate-x-0.5" />
-                    </button>
-                  </div>
-                </article>
-              ))}
-            </div>
+                      {/* Hover glow */}
+                      <div
+                        aria-hidden="true"
+                        className="pointer-events-none absolute -right-20 -top-20 size-48 rounded-full bg-orange-100/0 blur-3xl transition duration-300 group-hover:bg-orange-100/80"
+                      />
+
+                      <div className="relative">
+                        {/* Card header */}
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="flex size-10 items-center justify-center rounded-full border border-orange-100 bg-orange-50 font-serif text-sm text-orange-600">
+                            {String(index + 1).padStart(
+                              2,
+                              "0",
+                            )}
+                          </span>
+
+                          <span className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.06] bg-gray-50 px-3 py-1.5 text-xs font-medium text-gray-500">
+                            <Clock3Icon className="size-3.5 text-orange-500" />
+                            {service.duration} λεπτά
+                          </span>
+                        </div>
+
+                        {/* Icon */}
+                        <div className="mt-10 flex size-12 items-center justify-center rounded-2xl bg-slate-900 text-white transition-colors duration-300 group-hover:bg-orange-500">
+                          <ScissorsIcon className="size-5" />
+                        </div>
+
+                        {/* Service content */}
+                        <h3 className="mt-6 font-serif text-3xl leading-tight tracking-[-0.025em] text-slate-900">
+                          {service.name}
+                        </h3>
+
+                        <p className="mt-4 text-sm leading-6 text-gray-500 sm:text-base sm:leading-7">
+                          {service.description}
+                        </p>
+                      </div>
+
+                      {/* Price and action */}
+                      <div className="relative mt-10 flex items-end justify-between gap-4 border-t border-black/[0.06] pt-5">
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-[0.16em] text-gray-400">
+                            Τιμή
+                          </p>
+
+                          <p className="mt-1 font-serif text-3xl tracking-tight text-slate-900">
+                            {currencyFormatter.format(
+                              service.price,
+                            )}
+                          </p>
+                        </div>
+
+                        <Link
+                          to="/booking"
+                          className="inline-flex size-12 items-center justify-center rounded-full bg-orange-500 text-white shadow-[0_8px_20px_rgba(249,115,22,0.24)] transition-all hover:bg-orange-600 hover:shadow-[0_10px_28px_rgba(249,115,22,0.34)] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
+                          aria-label={`Επιλογή υπηρεσίας ${service.name}`}
+                        >
+                          <ArrowRightIcon className="size-4 transition-transform group-hover:translate-x-0.5" />
+                        </Link>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
           </div>
         </div>
 
@@ -202,13 +223,13 @@ export function ServicesSection() {
             </p>
           </div>
 
-          <a
-            href="#booking"
+          <Link
+            to="/booking"
             className="inline-flex shrink-0 items-center gap-2 text-sm font-semibold text-orange-600 transition hover:text-orange-700"
           >
             Κλείσε ραντεβού
             <ArrowRightIcon className="size-4" />
-          </a>
+          </Link>
         </div>
       </div>
     </section>

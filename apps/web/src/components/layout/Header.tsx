@@ -87,6 +87,13 @@ export function Header() {
               </button>
             </>
           )}
+
+          <Link
+            to="/booking"
+            className="..."
+          >
+            Κλείσε ραντεβού
+          </Link>
         </div>
       </div>
     </header>
