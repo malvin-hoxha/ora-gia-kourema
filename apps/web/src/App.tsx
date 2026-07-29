@@ -1,14 +1,12 @@
-import {
-  Navigate,
-  Route,
-  Routes,
-} from "react-router-dom";
+import { Navigate, Route, Routes,} from "react-router-dom";
 import { HomePage } from "./pages/HomePage";
 import { LoginPage } from "./pages/LoginPage";
 import { RegisterPage } from "./pages/RegisterPage";
 import { ProtectedRoute } from "./auth/ProtectedRoute";
 import { BookingPage } from "./pages/BookingPage";
 import { DashboardPage } from "./pages/DashboardPage";
+import { StaffRoute } from "./auth/StaffRoute";
+import { StaffDashboardPage } from "./pages/StaffDashboardPage";
 
 const App = () => {
   return (
@@ -38,6 +36,15 @@ const App = () => {
           <ProtectedRoute>
             <DashboardPage />
           </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/staff"
+        element={
+          <StaffRoute>
+            <StaffDashboardPage />
+          </StaffRoute>
         }
       />
 

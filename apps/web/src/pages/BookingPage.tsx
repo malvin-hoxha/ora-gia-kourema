@@ -104,7 +104,7 @@ export function BookingPage() {
         onSuccess: async (appointment) => {
           setCreatedAppointment(appointment);
 
-          await queryClient.invalidateQueries({
+          await queryClient.invalidateQueries({ //invalidateQueries 
             queryKey: [
               "availability",
               selectedBarberId,

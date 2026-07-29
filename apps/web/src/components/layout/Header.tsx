@@ -12,6 +12,7 @@ const navigationItems = [
   { label: "Επικοινωνία", href: "#contact" },
 ];
 
+
 export function Header() {
 
   const {
@@ -20,6 +21,12 @@ export function Header() {
     isLoading,
     logout,
   } = useAuth();
+
+  const accountPath =
+  user?.role === "BARBER" ||
+  user?.role === "ADMIN"
+    ? "/staff"
+    : "/dashboard";
 
   
   return (
@@ -66,8 +73,9 @@ export function Header() {
           {!isLoading && isAuthenticated && user && (
             <>
               <Link
-                to="/dashboard"
-                className="hidden items-center gap-2 rounded-full border border-black/[0.06] bg-white px-3 py-2 transition hover:border-orange-100 hover:bg-orange-50 sm:flex"
+                to={accountPath}
+                className="hidden items-center gap-2 rounded-full border border-black/[0.06]
+                 bg-white px-3 py-2 transition hover:border-orange-100 hover:bg-orange-50 sm:flex"
               >
                 <div className="flex size-7 items-center justify-center rounded-full bg-orange-50 text-orange-500">
                   <UserRoundIcon className="size-3.5" />

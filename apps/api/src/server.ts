@@ -8,6 +8,7 @@ import { servicesRouter } from "./routes/service.route.js"
 import { barbersRouter } from "./routes/barbers.routes.js";
 import { appointmentsRouter } from "./routes/appointments.routes.js";
 import { authRouter } from "./routes/auth.routes.js";
+import { staffRouter } from "./routes/staff.routes.js";
 import { env } from "./config/env.js";
 
 const app = express();
@@ -34,6 +35,7 @@ app.use("/api/services", servicesRouter);
 app.use("/api/services", servicesRouter);
 app.use("/api/barbers", barbersRouter);
 app.use("/api/appointments", appointmentsRouter);
+app.use("/api/staff", staffRouter);
 
 app.get("/api/health", async (_req, res) => {
   try {

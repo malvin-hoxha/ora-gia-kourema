@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client.js";
+import argon2 from "argon2";
 
 const databaseUrl = process.env.DATABASE_URL;
 
@@ -213,9 +214,62 @@ async function seedDemoCustomer() {
   });
 }
 
+async function seedBarberAccounts() {
+  const passwordHash = await argon2.hash(
+    "Barber123",
+    {
+      type: argon2.argon2id,
+    },
+  );
+
+  const barberAccounts = [
+    {
+      barberName: "Alex",
+      email: "alex@oragiakourema.local",
+    },
+    {
+      barberName: "Nikos",
+      email: "nikos@oragiakourema.local",
+    },
+    {
+      barberName: "Mario",
+      email: "mario@oragiakourema.local",
+    },
+  ];
+
+  for (const account of barberAccounts) {
+    const user = await prisma.user.upsert({
+      where: {
+        email: account.email,
+      },
+      update: {
+        name: account.barberName,
+        role: "BARBER",
+        passwordHash,
+      },
+      create: {
+        name: account.barberName,
+        email: account.email,
+        role: "BARBER",
+        passwordHash,
+      },
+    });
+
+    await prisma.barber.update({
+      where: {
+        name: account.barberName,
+      },
+      data: {
+        userId: user.id,
+      },
+    });
+  }
+}
+
 async function main() {
   await seedServices();
   await seedBarbers();
+  await seedBarberAccounts();
   await seedDemoCustomer();
   
   console.log("Database seeded successfully.");

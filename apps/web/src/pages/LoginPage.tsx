@@ -52,8 +52,21 @@ export function LoginPage() {
             setIsSubmitting(true);
             setError(null);
 
-            await login({email,password,});
-            navigate("/", {replace: true,});
+            const authenticatedUser =
+              await login({
+                email,
+                password,
+              });
+
+            navigate(
+              authenticatedUser.role === "BARBER" ||
+                authenticatedUser.role === "ADMIN"
+                ? "/staff"
+                : "/",
+              {
+                replace: true,
+              },
+            );
         } catch (error) {
             if (error instanceof ApiError) {
                 setError(error.message);

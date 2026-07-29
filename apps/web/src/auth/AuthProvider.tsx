@@ -72,7 +72,13 @@ export function AuthProvider({children}: AuthProviderProps) {
     const login = useCallback(
         async (input: LoginInput) => {
             const response = await loginUser(input);
-            setUser(response.data.user);
+
+            const authenticatedUser =
+            response.data.user;
+
+            setUser(authenticatedUser);
+
+            return authenticatedUser;
         },
         [],
     );
