@@ -1,23 +1,285 @@
 import { DateTime } from "luxon";
 import { Router } from "express";
 import { Prisma } from "../generated/prisma/client.js";
-import {
-  AppointmentConflictError,
-  AppointmentValidationError,
-} from "../errors/appointment.errors.js";
+import { AppointmentConflictError, AppointmentValidationError,} from "../errors/appointment.errors.js";
 import { prisma } from "../lib/prisma.js";
-import { createAppointmentSchema } from "../schemas/appointment.schema.js";
-import {
-  createZonedDateTime,
-  isAlignedToSlotInterval,
-  SLOT_INTERVAL_MINUTES,
-} from "../utils/availability.js";
+import { cancelAppointmentParamsSchema, createAppointmentSchema,} from "../schemas/appointment.schema.js";
+import { createZonedDateTime, isAlignedToSlotInterval, SLOT_INTERVAL_MINUTES,} from "../utils/availability.js";
 
 import { requireAuth } from "../middleware/auth.middleware.js";
 
 export const appointmentsRouter = Router();
 
 const MAX_TRANSACTION_RETRIES = 3;
+
+const appointmentSelect = {
+  id: true,
+  startsAt: true,
+  endsAt: true,
+  status: true,
+  notes: true,
+  createdAt: true,
+
+  barber: {
+    select: {
+      id: true,
+      name: true,
+      imageUrl: true,
+    },
+  },
+
+  service: {
+    select: {
+      id: true,
+      name: true,
+      durationMinutes: true,
+      price: true,
+    },
+  },
+} satisfies Prisma.AppointmentSelect;
+
+
+type AppointmentResult = Prisma.AppointmentGetPayload<{
+  select: typeof appointmentSelect;
+}>;
+
+function formatAppointment(
+  appointment: AppointmentResult,
+) {
+  const timeZone =
+    process.env.BARBERSHOP_TIME_ZONE ?? "Europe/Athens";
+
+  const localStartsAt = DateTime.fromJSDate(
+    appointment.startsAt,
+    {
+      zone: "utc",
+    },
+  )
+    .setZone(timeZone)
+    .toISO();
+
+  const localEndsAt = DateTime.fromJSDate(
+    appointment.endsAt,
+    {
+      zone: "utc",
+    },
+  )
+    .setZone(timeZone)
+    .toISO();
+
+  return {
+    ...appointment,
+
+    service: {
+      ...appointment.service,
+      price: Number(appointment.service.price),
+    },
+
+    localStartsAt,
+    localEndsAt,
+    timeZone,
+  };
+}
+
+appointmentsRouter.get(
+  "/me",
+  requireAuth,
+  async (req, res) => {
+    try {
+      const appointments =
+        await prisma.appointment.findMany({
+          where: {
+            customerId: req.user!.id,
+          },
+
+          orderBy: {
+            startsAt: "desc",
+          },
+
+          select: appointmentSelect,
+        });
+
+      const now = new Date();
+
+      const formattedAppointments =
+        appointments.map(formatAppointment);
+
+      const upcoming = formattedAppointments
+        .filter(
+          (appointment) =>
+            appointment.startsAt >= now &&
+            appointment.status !== "CANCELLED" &&
+            appointment.status !== "COMPLETED" &&
+            appointment.status !== "NO_SHOW",
+        )
+        .sort(
+          (first, second) =>
+            first.startsAt.getTime() -
+            second.startsAt.getTime(),
+        );
+
+      const history = formattedAppointments
+        .filter(
+          (appointment) =>
+            appointment.startsAt < now ||
+            appointment.status === "CANCELLED" ||
+            appointment.status === "COMPLETED" ||
+            appointment.status === "NO_SHOW",
+        )
+        .sort(
+          (first, second) =>
+            second.startsAt.getTime() -
+            first.startsAt.getTime(),
+        );
+
+      res.status(200).json({
+        data: {
+          upcoming,
+          history,
+        },
+      });
+    } catch (error) {
+      console.error(
+        "Failed to retrieve customer appointments:",
+        error,
+      );
+
+      res.status(500).json({
+        message:
+          "Unable to retrieve appointments",
+      });
+    }
+  },
+);
+
+appointmentsRouter.patch(
+  "/:appointmentId/cancel",
+  requireAuth,
+  async (req, res) => {
+    const parsedParams =
+      cancelAppointmentParamsSchema.safeParse(
+        req.params,
+      );
+
+    if (!parsedParams.success) {
+      res.status(400).json({
+        message: "Invalid appointment id",
+        errors:
+          parsedParams.error.flatten().fieldErrors,
+      });
+
+      return;
+    }
+
+    const { appointmentId } =
+      parsedParams.data;
+
+    try {
+      const existingAppointment =
+        await prisma.appointment.findFirst({
+          where: {
+            id: appointmentId,
+            customerId: req.user!.id,
+          },
+
+          select: {
+            id: true,
+            startsAt: true,
+            status: true,
+          },
+        });
+
+      if (!existingAppointment) {
+        res.status(404).json({
+          message: "Appointment not found",
+        });
+
+        return;
+      }
+
+      if (
+        existingAppointment.status === "CANCELLED"
+      ) {
+        res.status(409).json({
+          message:
+            "Appointment is already cancelled",
+        });
+
+        return;
+      }
+
+      if (
+        existingAppointment.status === "COMPLETED" ||
+        existingAppointment.status === "NO_SHOW"
+      ) {
+        res.status(409).json({
+          message:
+            "This appointment can no longer be cancelled",
+        });
+
+        return;
+      }
+
+      const now = new Date();
+
+      if (existingAppointment.startsAt <= now) {
+        res.status(409).json({
+          message:
+            "Past appointments cannot be cancelled",
+        });
+
+        return;
+      }
+
+      const cancellationDeadline =
+        new Date(
+          existingAppointment.startsAt.getTime() -
+            2 * 60 * 60 * 1000,
+        );
+
+      if (now > cancellationDeadline) {
+        res.status(409).json({
+          message:
+            "Appointments must be cancelled at least 2 hours in advance",
+        });
+
+        return;
+      }
+
+      const cancelledAppointment =
+        await prisma.appointment.update({
+          where: {
+            id: existingAppointment.id,
+          },
+
+          data: {
+            status: "CANCELLED",
+          },
+
+          select: appointmentSelect,
+        });
+
+      res.status(200).json({
+        message:
+          "Appointment cancelled successfully",
+
+        data: formatAppointment(
+          cancelledAppointment,
+        ),
+      });
+    } catch (error) {
+      console.error(
+        "Failed to cancel appointment:",
+        error,
+      );
+
+      res.status(500).json({
+        message:
+          "Unable to cancel appointment",
+      });
+    }
+  },
+);
 
 appointmentsRouter.post(
   "/",

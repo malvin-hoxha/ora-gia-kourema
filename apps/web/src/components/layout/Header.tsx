@@ -65,7 +65,10 @@ export function Header() {
 
           {!isLoading && isAuthenticated && user && (
             <>
-              <div className="hidden items-center gap-2 rounded-full border border-black/[0.06] bg-white px-3 py-2 sm:flex">
+              <Link
+                to="/dashboard"
+                className="hidden items-center gap-2 rounded-full border border-black/[0.06] bg-white px-3 py-2 transition hover:border-orange-100 hover:bg-orange-50 sm:flex"
+              >
                 <div className="flex size-7 items-center justify-center rounded-full bg-orange-50 text-orange-500">
                   <UserRoundIcon className="size-3.5" />
                 </div>
@@ -73,8 +76,7 @@ export function Header() {
                 <span className="max-w-32 truncate text-sm font-medium text-slate-700">
                   {user.name}
                 </span>
-              </div>
-
+              </Link>
               <button
                 type="button"
                 onClick={() => {
@@ -85,12 +87,13 @@ export function Header() {
               >
                 <LogOutIcon className="size-4" />
               </button>
+
+              
             </>
           )}
-
           <Link
             to="/booking"
-            className="..."
+            className="rounded-full bg-orange-500 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-orange-600 hover:shadow-md hover:shadow-orange-200"
           >
             Κλείσε ραντεβού
           </Link>

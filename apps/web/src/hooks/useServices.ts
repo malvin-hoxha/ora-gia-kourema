@@ -2,9 +2,10 @@ import { useQuery } from "@tanstack/react-query";
 import { getServices } from "../api/services.api";
 
 export function useServices() {
-  return useQuery({
-    queryKey: ["services"],
-    queryFn: getServices,
-    staleTime: 5 * 60 * 1000,
+  //does not request directly, it gives TanStack Query the instructions on how to do it
+  return useQuery({  
+    queryKey: ["services"], //data named services on cache
+    queryFn: getServices, //fetch from this function to load data when needed
+    staleTime: 5 * 60 * 1000,   //consider the data fresh for 5 minutes
   });
 }

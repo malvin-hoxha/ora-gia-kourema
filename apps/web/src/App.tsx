@@ -8,6 +8,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { RegisterPage } from "./pages/RegisterPage";
 import { ProtectedRoute } from "./auth/ProtectedRoute";
 import { BookingPage } from "./pages/BookingPage";
+import { DashboardPage } from "./pages/DashboardPage";
 
 const App = () => {
   return (
@@ -29,7 +30,16 @@ const App = () => {
             <BookingPage />
           </ProtectedRoute>
         }
-    />
+      />
+
+      <Route
+        path="/dashboard"
+        element={
+          <ProtectedRoute>
+            <DashboardPage />
+          </ProtectedRoute>
+        }
+      />
 
       <Route
         path="*"

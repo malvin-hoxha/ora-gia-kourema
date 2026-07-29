@@ -43,7 +43,7 @@ export async function getAvailableSlots({
   serviceId,
   date,
 }: GetAvailabilityInput) {
-  const params = new URLSearchParams({
+  const params = new URLSearchParams({ // creates => serviceId=service_456&date=2026-08-10
     serviceId,
     date,
   });

@@ -1,5 +1,12 @@
 import { apiRequest } from "./api-client";
 
+export type AppointmentStatus =
+  | "PENDING"
+  | "CONFIRMED"
+  | "COMPLETED"
+  | "CANCELLED"
+  | "NO_SHOW";
+
 export type CreateAppointmentInput = {
   barberId: string;
   serviceId: string;
@@ -7,19 +14,23 @@ export type CreateAppointmentInput = {
   notes?: string;
 };
 
-export type CreatedAppointment = {
+export type Appointment = {
   id: string;
   startsAt: string;
   endsAt: string;
   localStartsAt: string;
   localEndsAt: string;
-  status: "PENDING" | "CONFIRMED";
+  status: AppointmentStatus;
   notes: string | null;
+  createdAt: string;
   timeZone: string;
+
   barber: {
     id: string;
     name: string;
+    imageUrl: string | null;
   };
+
   service: {
     id: string;
     name: string;
@@ -28,9 +39,25 @@ export type CreatedAppointment = {
   };
 };
 
+export type CreatedAppointment = Appointment;
+
+export type MyAppointments = {
+  upcoming: Appointment[];
+  history: Appointment[];
+};
+
 type CreateAppointmentResponse = {
   message: string;
   data: CreatedAppointment;
+};
+
+type MyAppointmentsResponse = {
+  data: MyAppointments;
+};
+
+type CancelAppointmentResponse = {
+  message: string;
+  data: Appointment;
 };
 
 export async function createAppointment(
@@ -42,6 +69,29 @@ export async function createAppointment(
       {
         method: "POST",
         body: JSON.stringify(input),
+      },
+    );
+
+  return response.data;
+}
+
+export async function getMyAppointments() {
+  const response =
+    await apiRequest<MyAppointmentsResponse>(
+      "/appointments/me",
+    );
+
+  return response.data;
+}
+
+export async function cancelAppointment(
+  appointmentId: string,
+) {
+  const response =
+    await apiRequest<CancelAppointmentResponse>(
+      `/appointments/${appointmentId}/cancel`,
+      {
+        method: "PATCH",
       },
     );
 

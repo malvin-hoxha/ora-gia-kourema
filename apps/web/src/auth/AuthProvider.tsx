@@ -1,6 +1,7 @@
 import { useCallback,  useEffect,  useMemo,  useState,  type ReactNode} from "react";
 
-import { getCurrentUser, LoginUser as loginUser, logoutUser, registerUser, type AuthUser, type LoginInput, type RegisterInput } from "../api/auth.api";
+import { getCurrentUser, LoginUser as loginUser, logoutUser, registerUser, type AuthUser, type LoginInput, type RegisterInput } 
+from "../api/auth.api";
 import { ApiError } from "../api/api-client";
 import { AuthContext, type AuthContextValue } from "./AuthContext";
 
@@ -35,7 +36,7 @@ export function AuthProvider({children}: AuthProviderProps) {
                 const response = await getCurrentUser();
 
                 if (isActive) {
-                setUser(response.data.user);
+                    setUser(response.data.user);
                 }
             } catch (error) {
                 if (

@@ -12,20 +12,20 @@ export function useAvailability({
   serviceId,
   date,
 }: UseAvailabilityInput) {
-  return useQuery({
+  return useQuery({ // key for the cache like [availability, barberId, serviceId, date] in useEffect 
     queryKey: [
       "availability",
       barberId,
       serviceId,
       date,
     ],
-    queryFn: () =>
+    queryFn: () => //queryFn needs empty parameter but getAvailableSlots needs them
       getAvailableSlots({
         barberId,
         serviceId,
         date,
       }),
-    enabled:
+    enabled: //do not request until these are defined, => good for forms
       Boolean(barberId) &&
       Boolean(serviceId) &&
       Boolean(date),

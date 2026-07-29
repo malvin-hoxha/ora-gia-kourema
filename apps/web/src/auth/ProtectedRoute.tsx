@@ -10,7 +10,7 @@ type ProtectedRouteProps = {
 };
 
 export function ProtectedRoute({children}: ProtectedRouteProps) {
-    const location = useLocation();
+    const location = useLocation(); //information about current URL, we need the e.g. pathname='/appointments'
     
     const {
         isAuthenticated,
@@ -27,7 +27,9 @@ export function ProtectedRoute({children}: ProtectedRouteProps) {
 
     if (!isAuthenticated) {
         return (
-            <Navigate to="/login" replace state={{from: location.pathname}} />
+            <Navigate to="/login" replace state={{from: location.pathname}} /> 
+            //replace => '/dashboard' with '/login' and cannot go back to '/dashboard'
+            //state => redirect to where user was before login
         )
     }
 

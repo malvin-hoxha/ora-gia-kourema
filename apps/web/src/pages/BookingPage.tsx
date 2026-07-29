@@ -42,13 +42,8 @@ function getTodayDate() {
   const now = new Date();
 
   const year = now.getFullYear();
-  const month = String(
-    now.getMonth() + 1,
-  ).padStart(2, "0");
-  const day = String(now.getDate()).padStart(
-    2,
-    "0",
-  );
+  const month = String(now.getMonth() + 1,).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2,"0",);
 
   return `${year}-${month}-${day}`;
 }
@@ -60,34 +55,34 @@ export function BookingPage() {
 
     const [currentStep, setCurrentStep] = useState<BookingStep>("service");
 
-    const [selectedServiceId, setSelectedServiceId] = useState("");
+    const [selectedServiceId, setSelectedServiceId] = useState(""); //service id of classic haircut, haircut & beard etc
 
-    const [selectedBarberId, setSelectedBarberId] = useState("");
+    const [selectedBarberId, setSelectedBarberId] = useState(""); //which barber id of Alex, Nikos, Mario
 
-    const [selectedDate, setSelectedDate] = useState("");
+    const [selectedDate, setSelectedDate] = useState(""); 
 
-    const [selectedSlot, setSelectedSlot] = useState<AvailableSlot | null>(null);
+    const [selectedSlot, setSelectedSlot] = useState<AvailableSlot | null>(null); //e.g. 14:30
 
     const [notes, setNotes] = useState("");
 
-    const [createdAppointment, setCreatedAppointment] = useState<CreatedAppointment | null>(null);
+    const [createdAppointment, setCreatedAppointment] = useState<CreatedAppointment | null>(null); //success POST /appointments => new appointment
 
-    const servicesQuery = useServices();
-    const barbersQuery = useBarbers();
+    const servicesQuery = useServices(); //React Query hook useServices
+    const barbersQuery = useBarbers(); //React Query hook useBarbers
 
     const availabilityQuery = useAvailability({
         barberId: selectedBarberId,
         serviceId: selectedServiceId,
         date: selectedDate,
-    });
+    }); //React Query hook useAvailability
 
-    const selectedService = useMemo(
-        () =>
+    const selectedService = useMemo( //computed value based on selectedServiceId
+        () => //will be executed when needed
         servicesQuery.data?.find(
             (service) =>
             service.id === selectedServiceId,
-        ) ?? null,
-        [servicesQuery.data, selectedServiceId],
+        ) ?? null, //convert to null if servicesQuery returns undefined
+        [servicesQuery.data, selectedServiceId],  
     );
 
     const availableBarbers = useMemo(() => {
@@ -96,7 +91,7 @@ export function BookingPage() {
         }
 
         return barbersQuery.data.filter((barber) =>
-            barber.services.some(
+            barber.services.some( //some returns true if there is at least one service with the selected id and it stops
                 (service) =>
                 service.id === selectedServiceId,
             ),
@@ -107,30 +102,30 @@ export function BookingPage() {
         mutationFn: createAppointment,
 
         onSuccess: async (appointment) => {
-        setCreatedAppointment(appointment);
+          setCreatedAppointment(appointment);
 
-        await queryClient.invalidateQueries({
+          await queryClient.invalidateQueries({
             queryKey: [
-            "availability",
-            selectedBarberId,
-            selectedServiceId,
-            selectedDate,
+              "availability",
+              selectedBarberId,
+              selectedServiceId,
+              selectedDate,
             ],
         });
         },
     });
 
     const selectedBarber = useMemo(
-        () =>
+        () => 
             barbersQuery.data?.find(
             (barber) => barber.id === selectedBarberId,
             ) ?? null,
         [barbersQuery.data, selectedBarberId],
     );
 
-    function selectService(service: Service) {
+    function selectService(service: Service) { //service that user clicked on
         setSelectedServiceId(service.id);
-
+        //clear the options for next appointments
         setSelectedBarberId("");
         setSelectedDate("");
         setSelectedSlot(null);
@@ -140,9 +135,9 @@ export function BookingPage() {
 
     function selectBarber(barber: Barber) {
         setSelectedBarberId(barber.id);
+        //clear the options for next appointments
         setSelectedDate("");
         setSelectedSlot(null);
-
         setCurrentStep("date");
     }
 
@@ -314,15 +309,15 @@ export function BookingPage() {
                     )}
 
                     {currentStep === "barber" && (
-                    <BarberStep
-                        barbers={availableBarbers}
-                        isLoading={barbersQuery.isPending}
-                        isError={barbersQuery.isError}
-                        selectedBarberId={
-                        selectedBarberId
-                        }
-                        onSelect={selectBarber}
-                    />
+                      <BarberStep
+                          barbers={availableBarbers}
+                          isLoading={barbersQuery.isPending}
+                          isError={barbersQuery.isError}
+                          selectedBarberId={
+                          selectedBarberId
+                          }
+                          onSelect={selectBarber}
+                      />
                     )}
 
                     {currentStep === "date" && (
@@ -353,25 +348,25 @@ export function BookingPage() {
                     )}
 
                     {currentStep === "confirmation" &&
-                    selectedService &&
-                    selectedBarber &&
-                    selectedSlot && (
+                      selectedService &&
+                      selectedBarber &&
+                      selectedSlot && (
                         <ConfirmationStep
-                        service={selectedService}
-                        barber={selectedBarber}
-                        date={selectedDate}
-                        slot={selectedSlot}
-                        notes={notes}
-                        onNotesChange={setNotes}
-                        onConfirm={() => {
-                            void confirmAppointment();
-                        }}
-                        isSubmitting={
-                            createAppointmentMutation.isPending
-                        }
-                        error={
-                            createAppointmentMutation.error
-                        }
+                          service={selectedService}
+                          barber={selectedBarber}
+                          date={selectedDate}
+                          slot={selectedSlot}
+                          notes={notes}
+                          onNotesChange={setNotes}
+                          onConfirm={() => {
+                              void confirmAppointment();
+                          }}
+                          isSubmitting={
+                              createAppointmentMutation.isPending
+                          }
+                          error={
+                              createAppointmentMutation.error
+                          }
                         />
                     )}
                 </div>
@@ -532,7 +527,7 @@ function BarberStep({
                 "rounded-2xl border bg-white p-5 text-left transition",
                 isSelected
                   ? "border-orange-400 ring-4 ring-orange-50"
-                  : "border-black/[0.06] hover:-translate-y-1 hover:border-orange-200 hover:shadow-lg",
+                  : "border-black/6 hover:-translate-y-1 hover:border-orange-200 hover:shadow-lg",
               ].join(" ")}
             >
               <div className="flex size-14 items-center justify-center rounded-full bg-slate-900 text-white">
