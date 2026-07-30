@@ -528,6 +528,10 @@ async function createAppointmentTransaction(
     );
   }
 
+  if (!workingHours.startTime || !workingHours.endTime) {
+    throw new Error("Invalid working hours");
+  }
+
   const localDate = requestedStart.toISODate();
 
   if (!localDate) {

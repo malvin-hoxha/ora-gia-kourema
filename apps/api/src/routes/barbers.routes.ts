@@ -227,6 +227,10 @@ barbersRouter.get(
         return;
       }
 
+      if (!workingHours.startTime || !workingHours.endTime) {
+        throw new Error("Invalid working hours");
+      }
+
       const workingDayStart = createZonedDateTime(
         date,
         workingHours.startTime,

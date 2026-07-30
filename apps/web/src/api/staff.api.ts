@@ -111,3 +111,49 @@ export async function updateStaffAppointmentStatus(
 
   return response.data;
 }
+
+export type WorkingDay = {
+  dayOfWeek: number;
+  active: boolean;
+  startTime: string | null;
+  endTime: string | null;
+};
+
+type WorkingHoursResponse = {
+  data: {
+    workingHours: WorkingDay[];
+  };
+};
+
+type UpdateWorkingHoursResponse = {
+  message: string;
+  data: {
+    workingHours: WorkingDay[];
+  };
+};
+
+export async function getStaffWorkingHours() {
+  const response =
+    await apiRequest<WorkingHoursResponse>(
+      "/staff/working-hours",
+    );
+
+  return response.data.workingHours;
+}
+
+export async function updateStaffWorkingHours(
+  workingHours: WorkingDay[],
+) {
+  const response =
+    await apiRequest<UpdateWorkingHoursResponse>(
+      "/staff/working-hours",
+      {
+        method: "PUT",
+        body: JSON.stringify({
+          workingHours,
+        }),
+      },
+    );
+
+  return response.data.workingHours;
+}

@@ -1,40 +1,24 @@
-import {
-  CalendarDaysIcon,
-  CheckCircle2Icon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  CircleAlertIcon,
-  Clock3Icon,
-  HistoryIcon,
-  LoaderCircleIcon,
-  MailIcon,
-  PhoneIcon,
-  ScissorsIcon,
-  UserRoundIcon,
-  XCircleIcon,
+import { CalendarDaysIcon, CheckCircle2Icon, ChevronLeftIcon, ChevronRightIcon, CircleAlertIcon,
+  Clock3Icon, HistoryIcon, LoaderCircleIcon, MailIcon, PhoneIcon, ScissorsIcon, UserRoundIcon, XCircleIcon,
+  CalendarClockIcon, SaveIcon,
 } from "lucide-react";
-import {
-  useState,
-} from "react";
-import {
-  Link,
-} from "react-router-dom";
+import { useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 import { ApiError } from "../api/api-client";
-import type {
-  StaffAppointment,
-  StaffAppointmentStatus,
-  UpdateAppointmentStatus,
-} from "../api/staff.api";
+import type { StaffAppointment, StaffAppointmentStatus, UpdateAppointmentStatus, WorkingDay} from "../api/staff.api";
 import { useAuth } from "../auth/useAuth";
 import { useStaffAppointments } from "../hooks/useStaffAppointments";
 import { useUpdateStaffAppointmentStatus } from "../hooks/useUpdateStaffAppointmentStatus";
+import { useStaffWorkingHours } from "../hooks/useStaffWorkingHours";
+import { useUpdateStaffWorkingHours } from "../hooks/useUpdateStaffWorkingHours";
 
-type StatusFilter =
-  | ""
-  | StaffAppointmentStatus;
+type StatusFilter = | "" | StaffAppointmentStatus;
 
-const currencyFormatter =
-  new Intl.NumberFormat("el-GR", {
+type StaffDashboardTab =
+  | "appointments"
+  | "working-hours";
+
+const currencyFormatter = new Intl.NumberFormat("el-GR", {
     style: "currency",
     currency: "EUR",
   });
@@ -42,35 +26,23 @@ const currencyFormatter =
 function toDateInputValue(date: Date) {
   const year = date.getFullYear();
 
-  const month = String(
-    date.getMonth() + 1,
-  ).padStart(2, "0");
+  const month = String( date.getMonth() + 1, ).padStart(2, "0");
 
-  const day = String(
-    date.getDate(),
-  ).padStart(2, "0");
+  const day = String( date.getDate(), ).padStart(2, "0");
 
   return `${year}-${month}-${day}`;
 }
 
-function addDays(
-  dateString: string,
-  amount: number,
+function addDays( dateString: string, amount: number,
 ) {
-  const date = new Date(
-    `${dateString}T12:00:00`,
-  );
+  const date = new Date( `${dateString}T12:00:00`, );
 
-  date.setDate(
-    date.getDate() + amount,
-  );
+  date.setDate( date.getDate() + amount,  );
 
   return toDateInputValue(date);
 }
 
-function formatSelectedDate(
-  dateString: string,
-) {
+function formatSelectedDate( dateString: string,) {
   return new Intl.DateTimeFormat(
     "el-GR",
     {
@@ -79,27 +51,19 @@ function formatSelectedDate(
       month: "long",
       year: "numeric",
     },
-  ).format(
-    new Date(`${dateString}T12:00:00`),
-  );
+  ).format( new Date(`${dateString}T12:00:00`), );
 }
 
 export function StaffDashboardPage() {
   const { user, logout } = useAuth();
 
-  const [selectedDate, setSelectedDate] =
-    useState(() =>
-      toDateInputValue(new Date()),
-    );
+  const [selectedDate, setSelectedDate] = useState(() => toDateInputValue(new Date()), );
 
-  const [statusFilter, setStatusFilter] =
-    useState<StatusFilter>("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("");
 
-  const [
-    pendingStatusChange,
-    setPendingStatusChange,
-  ] = useState<{
-    appointment: StaffAppointment;
+  const [activeTab, setActiveTab] = useState<StaffDashboardTab>( "appointments",);
+
+  const [ pendingStatusChange, setPendingStatusChange, ] = useState<{ appointment: StaffAppointment;
     status: UpdateAppointmentStatus;
   } | null>(null);
 
@@ -112,9 +76,7 @@ export function StaffDashboardPage() {
   const updateStatusMutation =
     useUpdateStaffAppointmentStatus();
 
-  const appointments =
-    appointmentsQuery.data
-      ?.appointments ?? [];
+  const appointments = appointmentsQuery.data?.appointments ?? [];
 
   async function confirmStatusChange() {
     if (!pendingStatusChange) {
@@ -236,81 +198,114 @@ export function StaffDashboardPage() {
             </span>
           </div>
 
-          <div className="bg-[#f7f7f7] p-4 sm:p-7">
-            <StaffFilters
-              selectedDate={selectedDate}
-              statusFilter={statusFilter}
-              onDateChange={setSelectedDate}
-              onStatusChange={
-                setStatusFilter
-              }
-            />
+          <div className="border-b border-black/[0.06] bg-white px-4 py-4 sm:px-7">
+            <div className="inline-flex rounded-full border border-black/[0.07] bg-gray-50 p-1">
+              <button
+                type="button"
+                onClick={() => setActiveTab("appointments")}
+                className={[
+                  "inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition",
+                  activeTab === "appointments"
+                    ? "bg-slate-900 text-white"
+                    : "text-gray-500 hover:text-slate-900",
+                ].join(" ")}
+              >
+                <CalendarDaysIcon className="size-4" />
+                Ραντεβού
+              </button>
 
-            <div className="mt-7 flex flex-wrap items-center justify-between gap-4">
-              <div>
-                <p className="text-sm font-semibold text-slate-800">
-                  Ραντεβού ημέρας
-                </p>
-
-                <p className="mt-1 text-sm text-gray-400">
-                  {appointments.length} συνολικά
-                </p>
-              </div>
-
-              {appointmentsQuery.isFetching &&
-                !appointmentsQuery.isPending && (
-                  <div className="inline-flex items-center gap-2 text-sm text-gray-400">
-                    <LoaderCircleIcon className="size-4 animate-spin" />
-                    Ανανέωση
-                  </div>
-                )}
-            </div>
-
-            {appointmentsQuery.isPending && (
-              <StaffLoadingState />
-            )}
-
-            {appointmentsQuery.isError && (
-              <StaffErrorState
-                onRetry={() => {
-                  void appointmentsQuery.refetch();
-                }}
-              />
-            )}
-
-            {!appointmentsQuery.isPending &&
-              !appointmentsQuery.isError &&
-              appointments.length === 0 && (
-                <StaffEmptyState
-                  date={selectedDate}
-                />
+              {user?.role === "BARBER" && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("working-hours")}
+                  className={[
+                    "inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition",
+                    activeTab === "working-hours"
+                      ? "bg-slate-900 text-white"
+                      : "text-gray-500 hover:text-slate-900",
+                  ].join(" ")}
+                >
+                  <CalendarClockIcon className="size-4" />
+                  Ωράριο
+                </button>
               )}
+            </div>
+          </div>
 
-            {!appointmentsQuery.isPending &&
-              !appointmentsQuery.isError &&
-              appointments.length > 0 && (
-                <div className="mt-6 grid gap-4">
-                  {appointments.map(
-                    (appointment) => (
-                      <StaffAppointmentCard
-                        key={appointment.id}
-                        appointment={
-                          appointment
-                        }
-                        onStatusChange={(
-                          status,
-                        ) => {
-                          updateStatusMutation.reset();
+          <div className="bg-[#f7f7f7] p-4 sm:p-7">
+            {activeTab === "appointments" && (
+              <>
+                <StaffFilters
+                  selectedDate={selectedDate}
+                  statusFilter={statusFilter}
+                  onDateChange={setSelectedDate}
+                  onStatusChange={setStatusFilter}
+                />
 
-                          setPendingStatusChange({
-                            appointment,
-                            status,
-                          });
-                        }}
-                      />
-                    ),
-                  )}
+                <div className="mt-7 flex flex-wrap items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800">
+                      Ραντεβού ημέρας
+                    </p>
+
+                    <p className="mt-1 text-sm text-gray-400">
+                      {appointments.length} συνολικά
+                    </p>
+                  </div>
+
+                  {appointmentsQuery.isFetching &&
+                    !appointmentsQuery.isPending && (
+                      <div className="inline-flex items-center gap-2 text-sm text-gray-400">
+                        <LoaderCircleIcon className="size-4 animate-spin" />
+                        Ανανέωση
+                      </div>
+                    )}
                 </div>
+
+                {appointmentsQuery.isPending && (
+                  <StaffLoadingState />
+                )}
+
+                {appointmentsQuery.isError && (
+                  <StaffErrorState
+                    onRetry={() => {
+                      void appointmentsQuery.refetch();
+                    }}
+                  />
+                )}
+
+                {!appointmentsQuery.isPending &&
+                  !appointmentsQuery.isError &&
+                  appointments.length === 0 && (
+                    <StaffEmptyState date={selectedDate} />
+                  )}
+
+                {!appointmentsQuery.isPending &&
+                  !appointmentsQuery.isError &&
+                  appointments.length > 0 && (
+                    <div className="mt-6 grid gap-4">
+                      {appointments.map((appointment) => (
+                        <StaffAppointmentCard
+                          key={appointment.id}
+                          appointment={appointment}
+                          onStatusChange={(status) => {
+                            updateStatusMutation.reset();
+
+                            setPendingStatusChange({
+                              appointment,
+                              status,
+                            });
+                          }}
+                        />
+                      ))}
+                    </div>
+                  )}
+              </>
+            )}
+
+            {activeTab === "working-hours" &&
+              user?.role === "BARBER" && (
+                <WorkingHoursPanel />
               )}
           </div>
         </section>
@@ -344,6 +339,373 @@ export function StaffDashboardPage() {
         />
       )}
     </main>
+  );
+}
+
+
+const workingDayLabels: Record<number, string> = {
+  0: "Κυριακή",
+  1: "Δευτέρα",
+  2: "Τρίτη",
+  3: "Τετάρτη",
+  4: "Πέμπτη",
+  5: "Παρασκευή",
+  6: "Σάββατο",
+};
+
+function WorkingHoursPanel() {
+  const workingHoursQuery = useStaffWorkingHours();
+  const updateWorkingHoursMutation =
+    useUpdateStaffWorkingHours();
+
+  const [draftWorkingHours, setDraftWorkingHours] =
+    useState<WorkingDay[] | null>(null);
+
+  const workingHours =
+    draftWorkingHours ??
+    workingHoursQuery.data ??
+    [];
+
+  const hasChanges = draftWorkingHours !== null;
+
+  function updateWorkingDay(
+    dayOfWeek: number,
+    changes: Partial<WorkingDay>,
+  ) {
+    const source =
+      draftWorkingHours ??
+      workingHoursQuery.data ??
+      [];
+
+    setDraftWorkingHours(
+      source.map((day) =>
+        day.dayOfWeek === dayOfWeek
+          ? {
+              ...day,
+              ...changes,
+            }
+          : day,
+      ),
+    );
+
+    updateWorkingHoursMutation.reset();
+  }
+
+  function toggleWorkingDay(day: WorkingDay) {
+    if (day.active) {
+      updateWorkingDay(day.dayOfWeek, {
+        active: false,
+        startTime: null,
+        endTime: null,
+      });
+
+      return;
+    }
+
+    updateWorkingDay(day.dayOfWeek, {
+      active: true,
+      startTime: "09:00",
+      endTime: "18:00",
+    });
+  }
+
+  function hasInvalidWorkingHours() {
+    return workingHours.some(
+      (day) =>
+        day.active &&
+        (!day.startTime ||
+          !day.endTime ||
+          day.startTime >= day.endTime),
+    );
+  }
+
+  async function saveWorkingHours() {
+    if (
+      !draftWorkingHours ||
+      hasInvalidWorkingHours()
+    ) {
+      return;
+    }
+
+    try {
+      await updateWorkingHoursMutation.mutateAsync(
+        draftWorkingHours,
+      );
+
+      setDraftWorkingHours(null);
+    } catch {
+      // The mutation error is displayed below.
+    }
+  }
+
+  if (workingHoursQuery.isPending) {
+    return <WorkingHoursLoading />;
+  }
+
+  if (workingHoursQuery.isError) {
+    return (
+      <div className="rounded-2xl border border-red-100 bg-red-50 p-8 text-center">
+        <p className="font-semibold text-red-700">
+          Δεν ήταν δυνατή η φόρτωση του ωραρίου.
+        </p>
+
+        <button
+          type="button"
+          onClick={() => {
+            void workingHoursQuery.refetch();
+          }}
+          className="mt-4 text-sm font-semibold text-red-600 underline underline-offset-4"
+        >
+          Προσπάθησε ξανά
+        </button>
+      </div>
+    );
+  }
+
+  const invalidWorkingHours =
+    hasInvalidWorkingHours();
+
+  return (
+    <section>
+      <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
+        <div>
+          <h2 className="font-serif text-3xl text-slate-900">
+            Εβδομαδιαίο ωράριο
+          </h2>
+
+          <p className="mt-2 max-w-xl text-sm leading-6 text-gray-500">
+            Επίλεξε τις ημέρες που εργάζεσαι και
+            όρισε την ώρα έναρξης και λήξης.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-3">
+          {hasChanges && (
+            <button
+              type="button"
+              onClick={() => {
+                setDraftWorkingHours(null);
+                updateWorkingHoursMutation.reset();
+              }}
+              disabled={
+                updateWorkingHoursMutation.isPending
+              }
+              className="rounded-full border border-black/10 bg-white px-5 py-3 text-sm font-semibold text-gray-600 transition hover:bg-gray-50 disabled:opacity-50"
+            >
+              Ακύρωση αλλαγών
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => {
+              void saveWorkingHours();
+            }}
+            disabled={
+              !hasChanges ||
+              invalidWorkingHours ||
+              updateWorkingHoursMutation.isPending
+            }
+            className="inline-flex items-center justify-center gap-2 rounded-full bg-orange-500 px-6 py-3 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {updateWorkingHoursMutation.isPending ? (
+              <LoaderCircleIcon className="size-4 animate-spin" />
+            ) : (
+              <SaveIcon className="size-4" />
+            )}
+
+            Αποθήκευση
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-7 grid gap-3">
+        {workingHours.map((day) => (
+          <WorkingDayRow
+            key={day.dayOfWeek}
+            day={day}
+            onToggle={() =>
+              toggleWorkingDay(day)
+            }
+            onChange={(changes) =>
+              updateWorkingDay(
+                day.dayOfWeek,
+                changes,
+              )
+            }
+          />
+        ))}
+      </div>
+
+      {invalidWorkingHours && (
+        <div className="mt-6 rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+          Σε κάθε εργάσιμη ημέρα η ώρα λήξης πρέπει
+          να είναι αργότερα από την ώρα έναρξης.
+        </div>
+      )}
+
+      {updateWorkingHoursMutation.isSuccess &&
+        !hasChanges && (
+          <div className="mt-6 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
+            Το ωράριο αποθηκεύτηκε επιτυχώς.
+          </div>
+        )}
+
+      {updateWorkingHoursMutation.error && (
+        <div className="mt-6 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
+          {updateWorkingHoursMutation.error
+            instanceof ApiError
+            ? updateWorkingHoursMutation.error
+                .message
+            : "Δεν ήταν δυνατή η ενημέρωση του ωραρίου."}
+        </div>
+      )}
+    </section>
+  );
+}
+
+type WorkingDayRowProps = {
+  day: WorkingDay;
+  onToggle: () => void;
+  onChange: (
+    changes: Partial<WorkingDay>,
+  ) => void;
+};
+
+function WorkingDayRow({
+  day,
+  onToggle,
+  onChange,
+}: WorkingDayRowProps) {
+  return (
+    <div className="grid gap-4 rounded-2xl border border-black/[0.06] bg-white p-4 sm:grid-cols-[180px_1fr_auto] sm:items-center sm:p-5">
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          role="switch"
+          aria-checked={day.active}
+          onClick={onToggle}
+          className={[
+            "relative h-7 w-12 rounded-full transition",
+            day.active
+              ? "bg-orange-500"
+              : "bg-gray-200",
+          ].join(" ")}
+        >
+          <span
+            className={[
+              "absolute top-1 size-5 rounded-full bg-white shadow-sm transition",
+              day.active
+                ? "left-6"
+                : "left-1",
+            ].join(" ")}
+          />
+        </button>
+
+        <div>
+          <p className="font-semibold text-slate-800">
+            {workingDayLabels[day.dayOfWeek]}
+          </p>
+
+          <p className="mt-0.5 text-xs text-gray-400">
+            {day.active
+              ? "Εργάσιμη ημέρα"
+              : "Κλειστά"}
+          </p>
+        </div>
+      </div>
+
+      {day.active ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <TimeField
+            label="Έναρξη"
+            value={day.startTime ?? "09:00"}
+            onChange={(startTime) =>
+              onChange({ startTime })
+            }
+          />
+
+          <span className="hidden pt-6 text-gray-300 sm:block">
+            —
+          </span>
+
+          <TimeField
+            label="Λήξη"
+            value={day.endTime ?? "18:00"}
+            onChange={(endTime) =>
+              onChange({ endTime })
+            }
+          />
+        </div>
+      ) : (
+        <div className="rounded-xl border border-dashed border-black/10 bg-gray-50 px-4 py-3 text-sm text-gray-400">
+          Δεν υπάρχουν διαθέσιμες ώρες.
+        </div>
+      )}
+
+      <div
+        className={[
+          "rounded-full border px-3 py-1.5 text-center text-xs font-semibold",
+          day.active
+            ? "border-emerald-100 bg-emerald-50 text-emerald-700"
+            : "border-gray-200 bg-gray-100 text-gray-500",
+        ].join(" ")}
+      >
+        {day.active
+          ? `${day.startTime ?? "--:--"} – ${
+              day.endTime ?? "--:--"
+            }`
+          : "Κλειστά"}
+      </div>
+    </div>
+  );
+}
+
+type TimeFieldProps = {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+};
+
+function TimeField({
+  label,
+  value,
+  onChange,
+}: TimeFieldProps) {
+  return (
+    <label className="block">
+      <span className="text-xs font-medium text-gray-400">
+        {label}
+      </span>
+
+      <div className="mt-1.5 flex items-center gap-2 rounded-xl border border-black/10 bg-white px-3 focus-within:border-orange-300 focus-within:ring-4 focus-within:ring-orange-50">
+        <Clock3Icon className="size-4 text-orange-500" />
+
+        <input
+          type="time"
+          value={value}
+          onChange={(event) =>
+            onChange(event.target.value)
+          }
+          className="h-10 bg-transparent text-sm font-medium text-slate-700 outline-none"
+        />
+      </div>
+    </label>
+  );
+}
+
+function WorkingHoursLoading() {
+  return (
+    <div className="grid gap-3">
+      {[0, 1, 2, 3, 4, 5, 6].map(
+        (day) => (
+          <div
+            key={day}
+            className="min-h-24 animate-pulse rounded-2xl border border-black/[0.06] bg-white"
+          />
+        ),
+      )}
+    </div>
   );
 }
 
@@ -787,7 +1149,7 @@ function InformationItem({
   label,
   value,
 }: {
-  icon: React.ReactNode;
+  icon: ReactNode;
   label: string;
   value: string;
 }) {

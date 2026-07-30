@@ -4,7 +4,8 @@ import { Prisma } from "../generated/prisma/client.js";
 import { requireAuth, requireRole,} from "../middleware/auth.middleware.js";
 import { prisma } from "../lib/prisma.js";
 
-import { staffAppointmentsQuerySchema, updateAppointmentStatusBodySchema, updateAppointmentStatusParamsSchema,}
+import { staffAppointmentsQuerySchema, updateAppointmentStatusBodySchema, 
+updateAppointmentStatusParamsSchema, updateWorkingHoursSchema, }
 from "../schemas/staff.schema.js";
 
 export const staffRouter = Router();
@@ -102,8 +103,244 @@ async function getAuthenticatedBarberId(userId: string,) {
   return barber?.id ?? null;
 }
 
+const defaultWorkingHours = [
+  {
+    dayOfWeek: 0,
+    active: false,
+    startTime: null,
+    endTime: null,
+  },
+  {
+    dayOfWeek: 1,
+    active: false,
+    startTime: null,
+    endTime: null,
+  },
+  {
+    dayOfWeek: 2,
+    active: false,
+    startTime: null,
+    endTime: null,
+  },
+  {
+    dayOfWeek: 3,
+    active: false,
+    startTime: null,
+    endTime: null,
+  },
+  {
+    dayOfWeek: 4,
+    active: false,
+    startTime: null,
+    endTime: null,
+  },
+  {
+    dayOfWeek: 5,
+    active: false,
+    startTime: null,
+    endTime: null,
+  },
+  {
+    dayOfWeek: 6,
+    active: false,
+    startTime: null,
+    endTime: null,
+  },
+];
+
+function createCompleteWorkingWeek(
+  workingHours: Array<{
+    dayOfWeek: number;
+    active: boolean;
+    startTime: string | null;
+    endTime: string | null;
+  }>,
+) {
+  const workingHoursByDay = new Map(
+    workingHours.map((day) => [
+      day.dayOfWeek,
+      day,
+    ]),
+  );
+
+  return defaultWorkingHours.map(
+    (defaultDay) =>
+      workingHoursByDay.get(
+        defaultDay.dayOfWeek,
+      ) ?? defaultDay,
+  );
+}
+
+staffRouter.get("/working-hours", requireAuth, requireRole("BARBER"), async (req, res) => {
+    try {
+      const barberId = await getAuthenticatedBarberId( req.user!.id, );
+
+      if (!barberId) {
+        res.status(403).json({
+          message: "No active barber profile is linked to this account",
+        });
+
+        return;
+      }
+
+      const workingHours =
+        await prisma.workingHours.findMany({
+          where: {
+            barberId,
+          },
+
+          orderBy: {
+            dayOfWeek: "asc",
+          },
+
+          select: {
+            dayOfWeek: true,
+            active: true,
+            startTime: true,
+            endTime: true,
+          },
+        });
+
+      res.status(200).json({
+        data: {
+          workingHours:
+            createCompleteWorkingWeek(
+              workingHours,
+            ),
+        },
+      });
+    } catch (error) {
+      console.error(
+        "Failed to retrieve working hours:",
+        error,
+      );
+
+      res.status(500).json({
+        message:
+          "Unable to retrieve working hours",
+      });
+    }
+  },
+);
+
+staffRouter.put("/working-hours", requireAuth, requireRole("BARBER"), async (req, res) => {
+    const parsedBody = updateWorkingHoursSchema.safeParse( req.body, );
+
+    if (!parsedBody.success) {
+      res.status(400).json({
+        message: "Invalid working hours data",
+        errors: parsedBody.error.flatten().fieldErrors,
+        issues: parsedBody.error.issues,
+      });
+
+      return;
+    }
+
+    try {
+      const barberId = await getAuthenticatedBarberId( req.user!.id,);
+
+      if (!barberId) {
+        res.status(403).json({
+          message: "No active barber profile is linked to this account",
+        });
+
+        return;
+      }
+
+      const normalizedWorkingHours = parsedBody.data.workingHours.map(
+          (day) => ({
+            dayOfWeek: day.dayOfWeek,
+            active: day.active,
+
+            startTime: day.active
+              ? day.startTime
+              : null,
+
+            endTime: day.active
+              ? day.endTime
+              : null,
+          }),
+        );
+
+      await prisma.$transaction(
+        normalizedWorkingHours.map(
+          (day) =>
+            prisma.workingHours.upsert({
+              where: {
+                barberId_dayOfWeek: {
+                  barberId,
+                  dayOfWeek:
+                    day.dayOfWeek,
+                },
+              },
+
+              update: {
+                active: day.active,
+                startTime:
+                  day.startTime,
+                endTime:
+                  day.endTime,
+              },
+
+              create: {
+                barberId,
+                dayOfWeek:
+                  day.dayOfWeek,
+                active: day.active,
+                startTime:
+                  day.startTime,
+                endTime:
+                  day.endTime,
+              },
+            }),
+        ),
+      );
+
+      const updatedWorkingHours =
+        await prisma.workingHours.findMany({
+          where: {
+            barberId,
+          },
+
+          orderBy: {
+            dayOfWeek: "asc",
+          },
+
+          select: {
+            dayOfWeek: true,
+            active: true,
+            startTime: true,
+            endTime: true,
+          },
+        });
+
+      res.status(200).json({
+        message:
+          "Working hours updated successfully",
+
+        data: {
+          workingHours:
+            createCompleteWorkingWeek(
+              updatedWorkingHours,
+            ),
+        },
+      });
+    } catch (error) {
+      console.error(
+        "Failed to update working hours:",
+        error,
+      );
+
+      res.status(500).json({
+        message:
+          "Unable to update working hours",
+      });
+    }
+  },
+);
+
 staffRouter.get("/appointments", requireAuth, requireRole("BARBER", "ADMIN"), async (req, res) => {
-    const parsedQuery = staffAppointmentsQuerySchema.safeParse(req.query,);
+    const parsedQuery = staffAppointmentsQuerySchema.safeParse(req.query,); //date: "2026-08-10", status: "PENDING"
 
     if (!parsedQuery.success) {
         res.status(400).json({
@@ -124,9 +361,9 @@ staffRouter.get("/appointments", requireAuth, requireRole("BARBER", "ADMIN"), as
       let barberId: string | undefined;
 
       if (req.user!.role === "BARBER") {
-        const authenticatedBarberId = await getAuthenticatedBarberId( req.user!.id,);
+        const authenticatedBarberId = await getAuthenticatedBarberId( req.user!.id,); // ! => we know req.user exists as requireAuth runs before
 
-        if (!authenticatedBarberId) {
+        if (!authenticatedBarberId) { //if this fails, then req.user is an ADMIN and can see all appointments
             res.status(403).json({
                 message:
                 "No active barber profile is linked to this account",
@@ -138,11 +375,7 @@ staffRouter.get("/appointments", requireAuth, requireRole("BARBER", "ADMIN"), as
         barberId = authenticatedBarberId;
       }
 
-      let dateRange: | {
-            gte: Date;
-            lt: Date;
-          }
-        | undefined;
+      let dateRange: | { gte: Date; lt: Date;} | undefined;
 
       if (date) {
         const localDay = DateTime.fromISO(
@@ -172,26 +405,11 @@ staffRouter.get("/appointments", requireAuth, requireRole("BARBER", "ADMIN"), as
         };
       }
 
-      const appointments =
-        await prisma.appointment.findMany({
-          where: {
-            ...(barberId
-              ? {
-                  barberId,
-                }
-              : {}),
-
-            ...(status
-              ? {
-                  status,
-                }
-              : {}),
-
-            ...(dateRange
-              ? {
-                  startsAt: dateRange,
-                }
-              : {}),
+      const appointments = await prisma.appointment.findMany({
+          where: { 
+            ...(barberId ? { barberId, } : {}), //if {} then return all appointments, the () needs ...
+            ...(status ? { status,} : {}), 
+            ...(dateRange ? { startsAt: dateRange,} : {}),
           },
 
           orderBy: {
@@ -235,14 +453,13 @@ type ManagedAppointmentStatus =
   | "CANCELLED"
   | "NO_SHOW";
 
-const allowedStatusTransitions: Record<
-  ManagedAppointmentStatus,
-  ManagedAppointmentStatus[]
-> = {
+
+//object type <Key, Value>
+const allowedStatusTransitions: Record< ManagedAppointmentStatus, ManagedAppointmentStatus[]> = {
   PENDING: [
     "CONFIRMED",
     "CANCELLED",
-  ],
+  ], //PENDING.[1] = CANCELLED, meaning you can go from PENDING to CANCELLED or PENDING to CONFIRMED
 
   CONFIRMED: [
     "COMPLETED",
@@ -255,15 +472,9 @@ const allowedStatusTransitions: Record<
   NO_SHOW: [],
 };
 
-staffRouter.patch(
-  "/appointments/:appointmentId/status",
-  requireAuth,
-  requireRole("BARBER", "ADMIN"),
+staffRouter.patch("/appointments/:appointmentId/status", requireAuth, requireRole("BARBER", "ADMIN"),
   async (req, res) => {
-    const parsedParams =
-      updateAppointmentStatusParamsSchema.safeParse(
-        req.params,
-      );
+    const parsedParams = updateAppointmentStatusParamsSchema.safeParse( req.params,);
 
     if (!parsedParams.success) {
       res.status(400).json({
@@ -277,10 +488,7 @@ staffRouter.patch(
       return;
     }
 
-    const parsedBody =
-      updateAppointmentStatusBodySchema.safeParse(
-        req.body,
-      );
+    const parsedBody = updateAppointmentStatusBodySchema.safeParse( req.body,);
 
     if (!parsedBody.success) {
       res.status(400).json({
@@ -294,11 +502,9 @@ staffRouter.patch(
       return;
     }
 
-    const { appointmentId } =
-      parsedParams.data;
+    const { appointmentId } = parsedParams.data;
 
-    const { status: requestedStatus } =
-      parsedBody.data;
+    const { status: requestedStatus } = parsedBody.data;
 
     try {
       let barberId: string | undefined;
@@ -349,22 +555,13 @@ staffRouter.patch(
         return;
       }
 
-      const currentStatus =
-        appointment.status as ManagedAppointmentStatus;
+      const currentStatus = appointment.status as ManagedAppointmentStatus;
 
-      const nextStatuses =
-        allowedStatusTransitions[
-          currentStatus
-        ];
+      const nextStatuses = allowedStatusTransitions[ currentStatus ];
 
-      if (
-        !nextStatuses.includes(
-          requestedStatus,
-        )
-      ) {
+      if ( !nextStatuses.includes( requestedStatus, )) { //includes checks if requestedStatus is in nextStatuses
         res.status(409).json({
-          message:
-            `Appointment cannot change from ${currentStatus} to ${requestedStatus}`,
+          message: `Appointment cannot change from ${currentStatus} to ${requestedStatus}`,
         });
 
         return;
@@ -372,26 +569,14 @@ staffRouter.patch(
 
       const now = new Date();
 
-      if (
-        requestedStatus === "COMPLETED" &&
-        appointment.endsAt > now
-      ) {
-        res.status(409).json({
-          message:
-            "An appointment cannot be completed before it ends",
-        });
+      if ( requestedStatus === "COMPLETED" && appointment.endsAt > now ) {
+        res.status(409).json({ message: "An appointment cannot be completed before it ends", });
 
         return;
       }
 
-      if (
-        requestedStatus === "NO_SHOW" &&
-        appointment.startsAt > now
-      ) {
-        res.status(409).json({
-          message:
-            "A future appointment cannot be marked as no-show",
-        });
+      if ( requestedStatus === "NO_SHOW" && appointment.startsAt > now ) {
+        res.status(409).json({ message: "A future appointment cannot be marked as no-show", });
 
         return;
       }
@@ -430,3 +615,4 @@ staffRouter.patch(
     }
   },
 );
+

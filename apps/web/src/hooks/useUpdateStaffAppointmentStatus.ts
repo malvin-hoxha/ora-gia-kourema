@@ -13,16 +13,16 @@ import {
 } from "./useStaffAppointments";
 
 export function useUpdateStaffAppointmentStatus() {
-  const queryClient = useQueryClient();
+  const queryClient = useQueryClient(); //cache object like ["my-appointments"], ["availability", "barber-1", "service-2", "2026-08-10"] 
 
   return useMutation({
-    mutationFn: updateStaffAppointmentStatus,
+    mutationFn: updateStaffAppointmentStatus, //PATCH request
 
     onSuccess: async () => {
-      await Promise.all([
+      await Promise.all([ //promise.all is used to wait for all the promises to resolve
         queryClient.invalidateQueries({
           queryKey:
-            staffAppointmentsQueryKeys.all,
+            staffAppointmentsQueryKeys.all, // set ["staff-appointments"] as old, so refetch needed
         }),
 
         queryClient.invalidateQueries({

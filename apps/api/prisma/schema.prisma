@@ -92,8 +92,8 @@ model WorkingHours {
   id        String  @id @default(cuid())
   barberId  String
   dayOfWeek Int
-  startTime String
-  endTime   String
+  startTime String?
+  endTime   String?
   active    Boolean @default(true)
 
   barber Barber @relation(fields: [barberId], references: [id], onDelete: Cascade)
