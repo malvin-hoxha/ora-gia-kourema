@@ -7,6 +7,8 @@ import { BookingPage } from "./pages/BookingPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { StaffRoute } from "./auth/StaffRoute";
 import { StaffDashboardPage } from "./pages/StaffDashboardPage";
+import { AdminRoute } from "./auth/AdminRoute";
+import { AdminDashboardPage } from "./pages/AdminDashboardPage";
 
 const App = () => {
   return (
@@ -45,6 +47,15 @@ const App = () => {
           <StaffRoute>
             <StaffDashboardPage />
           </StaffRoute>
+        }
+      />
+
+      <Route
+        path="/admin"
+        element={
+          <AdminRoute>
+            <AdminDashboardPage />
+          </AdminRoute>
         }
       />
 

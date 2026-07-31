@@ -17,6 +17,17 @@ export type StaffAppointment = {
   createdAt: string;
   timeZone: string;
 
+  cancelledAt: string | null;
+
+  cancelledBy:
+    | "CUSTOMER"
+    | "BARBER"
+    | "ADMIN"
+    | "SYSTEM"
+    | null;
+
+  cancellationReason: string | null;
+
   customer: {
     id: string;
     name: string;
@@ -156,4 +167,157 @@ export async function updateStaffWorkingHours(
     );
 
   return response.data.workingHours;
+}
+
+export type TimeOffInput = {
+  date: string;
+  allDay: boolean;
+  startTime: string | null;
+  endTime: string | null;
+  reason: string | null;
+};
+
+export type StaffTimeOff = {
+  id: string;
+  startsAt: string;
+  endsAt: string;
+  localStartsAt: string;
+  localEndsAt: string;
+  reason: string | null;
+  timeZone: string;
+  createdAt?: string;
+};
+
+export type TimeOffConflictAppointment = {
+  id: string;
+  startsAt: string;
+  endsAt: string;
+  localStartsAt: string;
+  localEndsAt: string;
+  status: "PENDING" | "CONFIRMED";
+
+  customer: {
+    id: string;
+    name: string;
+    email: string;
+    phone: string | null;
+  };
+
+  service: {
+    id: string;
+    name: string;
+    durationMinutes: number;
+  };
+};
+
+export type TimeOffPreview = {
+  proposedTimeOff: {
+    date: string;
+    allDay: boolean;
+    startsAt: string;
+    endsAt: string;
+    localStartsAt: string;
+    localEndsAt: string;
+    timeZone: string;
+    reason: string | null;
+  };
+
+  conflictingTimeOff: {
+    id: string;
+    startsAt: string;
+    endsAt: string;
+    localStartsAt: string;
+    localEndsAt: string;
+    reason: string | null;
+  } | null;
+
+  conflictingAppointments:
+    TimeOffConflictAppointment[];
+
+  conflictingAppointmentsCount: number;
+  canCreate: boolean;
+};
+
+type TimeOffPreviewResponse = {
+  data: TimeOffPreview;
+};
+
+type CreateTimeOffResponse = {
+  message: string;
+
+  data: {
+    timeOff: StaffTimeOff;
+
+    cancelledAppointments:
+      TimeOffConflictAppointment[];
+
+    cancelledAppointmentsCount: number;
+  };
+};
+
+type StaffTimeOffResponse = {
+  data: {
+    timeOff: StaffTimeOff[];
+  };
+};
+
+type DeleteTimeOffResponse = {
+  message: string;
+
+  data: {
+    id: string;
+  };
+};
+
+export async function previewStaffTimeOff(
+  input: TimeOffInput,
+) {
+  const response =
+    await apiRequest<TimeOffPreviewResponse>(
+      "/staff/time-off/preview",
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
+    );
+
+  return response.data;
+}
+
+export async function createStaffTimeOff(
+  input: TimeOffInput,
+) {
+  const response =
+    await apiRequest<CreateTimeOffResponse>(
+      "/staff/time-off",
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
+    );
+
+  return response.data;
+}
+
+export async function getStaffTimeOff() {
+  const response =
+    await apiRequest<StaffTimeOffResponse>(
+      "/staff/time-off",
+    );
+
+  return response.data.timeOff;
+}
+
+export async function deleteStaffTimeOff(
+  timeOffId: string,
+) {
+  const response =
+    await apiRequest<DeleteTimeOffResponse>(
+      `/staff/time-off/${timeOffId}`,
+      {
+        method: "DELETE",
+      },
+    );
+
+  return response.data;
 }

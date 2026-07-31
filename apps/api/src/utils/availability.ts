@@ -1,6 +1,6 @@
 import { DateTime } from "luxon";
 
-export const SLOT_INTERVAL_MINUTES = 15;
+export const SLOT_INTERVAL_MINUTES = 30;
 
 type TimeRange = {
   startsAt: Date;

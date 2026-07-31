@@ -5,6 +5,7 @@ import { AppointmentConflictError, AppointmentValidationError,} from "../errors/
 import { prisma } from "../lib/prisma.js";
 import { cancelAppointmentParamsSchema, createAppointmentSchema,} from "../schemas/appointment.schema.js";
 import { createZonedDateTime, isAlignedToSlotInterval, SLOT_INTERVAL_MINUTES,} from "../utils/availability.js";
+import { BOOKING_WINDOW_DAYS } from "../constants/auth.constants.js";
 
 import { requireAuth } from "../middleware/auth.middleware.js";
 
@@ -19,6 +20,10 @@ const appointmentSelect = {
   status: true,
   notes: true,
   createdAt: true,
+
+  cancelledAt: true,
+  cancelledBy: true,
+  cancellationReason: true,
 
   barber: {
     select: {
@@ -254,6 +259,9 @@ appointmentsRouter.patch(
 
           data: {
             status: "CANCELLED",
+            cancelledAt: new Date(),
+            cancelledBy: "CUSTOMER",
+            cancellationReason: "Cancelled by customer",
           },
 
           select: appointmentSelect,
@@ -430,13 +438,16 @@ async function createAppointmentTransaction(
     );
   }
 
-  const maximumBookingDate = now.plus({
-    days: 90,
-  });
+  const maximumBookingDate = now
+    .startOf("day")
+    .plus({
+      days: BOOKING_WINDOW_DAYS,
+    })
+    .endOf("day");
 
   if (requestedStart > maximumBookingDate) {
     throw new AppointmentValidationError(
-      "Appointments can only be booked up to 90 days in advance",
+      `Appointments can only be booked up to ${BOOKING_WINDOW_DAYS} days in advance`,
     );
   }
 

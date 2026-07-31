@@ -21,6 +21,13 @@ enum AppointmentStatus {
   NO_SHOW
 }
 
+enum AppointmentCancelledBy {
+  CUSTOMER
+  BARBER
+  ADMIN
+  SYSTEM
+}
+
 model User {
   id           String   @id @default(cuid())
   name         String
@@ -132,14 +139,17 @@ model Service {
 }
 
 model Appointment {
-  id         String            @id @default(cuid())
-  customerId String
-  barberId   String
-  serviceId  String
-  startsAt   DateTime
-  endsAt     DateTime
-  status     AppointmentStatus @default(PENDING)
-  notes      String?
+  id                 String                  @id @default(cuid())
+  customerId         String
+  barberId           String
+  serviceId          String
+  startsAt           DateTime
+  endsAt             DateTime
+  status             AppointmentStatus       @default(PENDING)
+  notes              String?
+  cancelledAt        DateTime?
+  cancelledBy        AppointmentCancelledBy?
+  cancellationReason String?
 
   customer User    @relation(fields: [customerId], references: [id], onDelete: Cascade)
   barber   Barber  @relation(fields: [barberId], references: [id])

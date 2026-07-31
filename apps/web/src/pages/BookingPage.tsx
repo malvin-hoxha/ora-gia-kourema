@@ -16,6 +16,7 @@ import type { Service } from "../api/services.api";
 import { useAvailability } from "../hooks/useAvailability";
 import { useBarbers } from "../hooks/useBarbers";
 import { useServices } from "../hooks/useServices";
+import { BOOKING_WINDOW_DAYS } from "../constants/booking.constants";
 
 type BookingStep = | "service" | "barber" | "date" | "confirmation";
 
@@ -38,14 +39,48 @@ const steps: Array<{ id: BookingStep; label: string;}> = [
   },
 ];
 
-function getTodayDate() {
-  const now = new Date();
+function formatDateInputValue(date: Date) {
+  const year = date.getFullYear();
 
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1,).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2,"0",);
+  const month = String(
+    date.getMonth() + 1,
+  ).padStart(2, "0");
+
+  const day = String(
+    date.getDate(),
+  ).padStart(2, "0");
 
   return `${year}-${month}-${day}`;
+}
+
+function getTodayDate() {
+  return formatDateInputValue(new Date());
+}
+
+function getMaximumBookingDate() {
+  const maximumDate = new Date();
+
+  maximumDate.setDate(
+    maximumDate.getDate() +
+      BOOKING_WINDOW_DAYS,
+  );
+
+  return formatDateInputValue(maximumDate);
+}
+
+function formatMaximumBookingDate() {
+  return new Intl.DateTimeFormat(
+    "el-GR",
+    {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    },
+  ).format(
+    new Date(
+      `${getMaximumBookingDate()}T12:00:00`,
+    ),
+  );
 }
 
 export function BookingPage() {
@@ -605,6 +640,7 @@ function DateStep({
           <input
             type="date"
             min={getTodayDate()}
+            max={getMaximumBookingDate()}
             value={selectedDate}
             onChange={(event) =>
               onDateChange(event.target.value)
@@ -613,6 +649,14 @@ function DateStep({
           />
         </div>
       </label>
+
+      <p className="mt-3 max-w-sm text-xs leading-5 text-gray-400">
+        Μπορείς να κλείσεις ραντεβού έως{" "}
+        <span className="font-semibold text-slate-600">
+          {formatMaximumBookingDate()}
+        </span>
+        .
+      </p>
 
       {!selectedDate && (
         <div className="mt-7 rounded-2xl border border-dashed border-black/10 bg-white p-8 text-center text-sm text-gray-400">

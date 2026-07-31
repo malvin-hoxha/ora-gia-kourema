@@ -7,6 +7,7 @@ import {
   SLOT_INTERVAL_MINUTES,
   slotOverlapsAnyRange,
 } from "../utils/availability.js";
+import { BOOKING_WINDOW_DAYS } from "../constants/auth.constants.js";
 
 import { z } from "zod";
 
@@ -118,13 +119,13 @@ barbersRouter.get(
       }
 
       const latestAllowedDate = today.plus({
-        days: 90,
+        days: BOOKING_WINDOW_DAYS,
       });
 
       if (selectedDate > latestAllowedDate) {
         res.status(400).json({
           message:
-            "Availability can only be requested up to 90 days in advance",
+            `Availability can only be requested up to ${BOOKING_WINDOW_DAYS} days in advance`,
         });
 
         return;

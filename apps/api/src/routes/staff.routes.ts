@@ -5,8 +5,9 @@ import { requireAuth, requireRole,} from "../middleware/auth.middleware.js";
 import { prisma } from "../lib/prisma.js";
 
 import { staffAppointmentsQuerySchema, updateAppointmentStatusBodySchema, 
-updateAppointmentStatusParamsSchema, updateWorkingHoursSchema, }
+updateAppointmentStatusParamsSchema, updateWorkingHoursSchema, previewTimeOffSchema, timeOffParamsSchema}
 from "../schemas/staff.schema.js";
+import { TIME_OFF_CANCELLATION_REASON, TIME_OFF_WINDOW_DAYS,} from "../constants/time-off.constants.js";
 
 export const staffRouter = Router();
 
@@ -17,6 +18,10 @@ const appointmentSelect = {
     status: true,
     notes: true,
     createdAt: true,
+
+    cancelledAt: true,
+    cancelledBy: true,
+    cancellationReason: true,
 
     customer: {
         select: {
@@ -51,6 +56,38 @@ const appointmentSelect = {
     });
 
 */
+
+const timeOffConflictAppointmentSelect = {
+  id: true,
+  startsAt: true,
+  endsAt: true,
+  status: true,
+
+  customer: {
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      phone: true,
+    },
+  },
+
+  service: {
+    select: {
+      id: true,
+      name: true,
+      durationMinutes: true,
+    },
+  },
+} satisfies Prisma.AppointmentSelect;
+
+const timeOffSelect = {
+  id: true,
+  startsAt: true,
+  endsAt: true,
+  reason: true,
+} satisfies Prisma.TimeOffSelect;
+
 type AppointmentResult = Prisma.AppointmentGetPayload<{ //gives AppointmentResult the appointmentSelect fields
     select: typeof appointmentSelect;
 }>; 
@@ -88,6 +125,43 @@ function formatAppointment(appointment: AppointmentResult,) {
     };
 }
 
+type TimeOffResult =
+  Prisma.TimeOffGetPayload<{
+    select: typeof timeOffSelect;
+  }>;
+
+function formatTimeOff(
+  timeOff: TimeOffResult,
+) {
+  const timeZone =
+    process.env.BARBERSHOP_TIME_ZONE ??
+    "Europe/Athens";
+
+  return {
+    ...timeOff,
+
+    localStartsAt: DateTime.fromJSDate(
+      timeOff.startsAt,
+      {
+        zone: "utc",
+      },
+    )
+      .setZone(timeZone)
+      .toISO(),
+
+    localEndsAt: DateTime.fromJSDate(
+      timeOff.endsAt,
+      {
+        zone: "utc",
+      },
+    )
+      .setZone(timeZone)
+      .toISO(),
+
+    timeZone,
+  };
+}
+
 
 async function getAuthenticatedBarberId(userId: string,) {
     const barber = await prisma.barber.findFirst({
@@ -101,6 +175,141 @@ async function getAuthenticatedBarberId(userId: string,) {
     });
 
   return barber?.id ?? null;
+}
+
+type TimeOffInput = {
+  date: string;
+  allDay: boolean;
+  startTime: string | null;
+  endTime: string | null;
+  reason?: string | null;
+};
+
+function createTimeOffRange(
+  input: TimeOffInput,
+) {
+  const timeZone =
+    process.env.BARBERSHOP_TIME_ZONE ??
+    "Europe/Athens";
+
+  const localDate = DateTime.fromISO(
+    input.date,
+    {
+      zone: timeZone,
+    },
+  );
+
+  if (!localDate.isValid) {
+    return null;
+  }
+
+  if (input.allDay) {
+    const startsAt =
+      localDate.startOf("day");
+
+    const endsAt =
+      localDate.plus({
+        days: 1,
+      }).startOf("day");
+
+    return {
+      startsAt,
+      endsAt,
+      timeZone,
+    };
+  }
+
+  if (
+    !input.startTime ||
+    !input.endTime
+  ) {
+    return null;
+  }
+
+  const startsAt = DateTime.fromISO(
+    `${input.date}T${input.startTime}`,
+    {
+      zone: timeZone,
+    },
+  );
+
+  const endsAt = DateTime.fromISO(
+    `${input.date}T${input.endTime}`,
+    {
+      zone: timeZone,
+    },
+  );
+
+  if (
+    !startsAt.isValid ||
+    !endsAt.isValid
+  ) {
+    return null;
+  }
+
+  return {
+    startsAt,
+    endsAt,
+    timeZone,
+  };
+}
+
+function validateTimeOffRange(
+  startsAt: DateTime,
+  endsAt: DateTime,
+  allDay: boolean,
+) {
+  const timeZone =
+    process.env.BARBERSHOP_TIME_ZONE ??
+    "Europe/Athens";
+
+  const now = DateTime.now().setZone(
+    timeZone,
+  );
+
+  const today = now.startOf("day");
+
+  const maximumTimeOffDay = today
+    .plus({
+      days: TIME_OFF_WINDOW_DAYS,
+    })
+    .endOf("day");
+
+  if (endsAt <= startsAt) {
+    return {
+      valid: false as const,
+      message:
+        "Time off end must be later than its start",
+    };
+  }
+
+  if (allDay && startsAt <= today) {
+    return {
+      valid: false as const,
+      message:
+        "An all-day time off must start from tomorrow",
+    };
+  }
+
+  if (!allDay && startsAt <= now) {
+    return {
+      valid: false as const,
+      message:
+        "Time off must start in the future",
+    };
+  }
+
+  if (startsAt > maximumTimeOffDay) {
+    return {
+      valid: false as const,
+      message:
+        `Time off can only be declared up to ${TIME_OFF_WINDOW_DAYS} days in advance`,
+    };
+  }
+
+  return {
+    valid: true as const,
+  };
 }
 
 const defaultWorkingHours = [
@@ -169,6 +378,14 @@ function createCompleteWorkingWeek(
         defaultDay.dayOfWeek,
       ) ?? defaultDay,
   );
+}
+
+class TimeOffConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name =
+      "TimeOffConflictError";
+  }
 }
 
 staffRouter.get("/working-hours", requireAuth, requireRole("BARBER"), async (req, res) => {
@@ -334,6 +551,699 @@ staffRouter.put("/working-hours", requireAuth, requireRole("BARBER"), async (req
       res.status(500).json({
         message:
           "Unable to update working hours",
+      });
+    }
+  },
+);
+
+staffRouter.post(
+  "/time-off/preview",
+  requireAuth,
+  requireRole("BARBER"),
+  async (req, res) => {
+    const parsedBody =
+      previewTimeOffSchema.safeParse(
+        req.body,
+      );
+
+    if (!parsedBody.success) {
+      res.status(400).json({
+        message:
+          "Invalid time off data",
+
+        errors:
+          parsedBody.error.flatten()
+            .fieldErrors,
+
+        issues:
+          parsedBody.error.issues,
+      });
+
+      return;
+    }
+
+    try {
+      const barberId =
+        await getAuthenticatedBarberId(
+          req.user!.id,
+        );
+
+      if (!barberId) {
+        res.status(403).json({
+          message:
+            "No active barber profile is linked to this account",
+        });
+
+        return;
+      }
+
+      const timeOffRange =
+        createTimeOffRange(
+          parsedBody.data,
+        );
+
+      if (!timeOffRange) {
+        res.status(400).json({
+          message:
+            "Unable to create a valid time off range",
+        });
+
+        return;
+      }
+
+      const rangeValidation =
+        validateTimeOffRange(
+          timeOffRange.startsAt,
+          timeOffRange.endsAt,
+          parsedBody.data.allDay,
+        );
+
+      if (!rangeValidation.valid) {
+        res.status(400).json({
+          message:
+            rangeValidation.message,
+        });
+
+        return;
+      }
+
+      const conflictingTimeOff =
+        await prisma.timeOff.findFirst({
+          where: {
+            barberId,
+
+            startsAt: {
+              lt: timeOffRange.endsAt
+                .toUTC()
+                .toJSDate(),
+            },
+
+            endsAt: {
+              gt: timeOffRange.startsAt
+                .toUTC()
+                .toJSDate(),
+            },
+          },
+
+          select: {
+            id: true,
+            startsAt: true,
+            endsAt: true,
+            reason: true,
+          },
+        });
+
+      const conflictingAppointments =
+        await prisma.appointment.findMany({
+          where: {
+            barberId,
+
+            status: {
+              in: [
+                "PENDING",
+                "CONFIRMED",
+              ],
+            },
+
+            startsAt: {
+              lt: timeOffRange.endsAt
+                .toUTC()
+                .toJSDate(),
+            },
+
+            endsAt: {
+              gt: timeOffRange.startsAt
+                .toUTC()
+                .toJSDate(),
+            },
+          },
+
+          orderBy: {
+            startsAt: "asc",
+          },
+
+          select:
+            timeOffConflictAppointmentSelect,
+        });
+
+      res.status(200).json({
+        data: {
+          proposedTimeOff: {
+            date:
+              parsedBody.data.date,
+
+            allDay:
+              parsedBody.data.allDay,
+
+            startsAt:
+              timeOffRange.startsAt
+                .toUTC()
+                .toISO(),
+
+            endsAt:
+              timeOffRange.endsAt
+                .toUTC()
+                .toISO(),
+
+            localStartsAt:
+              timeOffRange.startsAt.toISO(),
+
+            localEndsAt:
+              timeOffRange.endsAt.toISO(),
+
+            timeZone:
+              timeOffRange.timeZone,
+
+            reason:
+              parsedBody.data.reason ??
+              null,
+          },
+
+          conflictingTimeOff:
+            conflictingTimeOff
+              ? {
+                  ...conflictingTimeOff,
+
+                  localStartsAt:
+                    DateTime.fromJSDate(
+                      conflictingTimeOff.startsAt,
+                      {
+                        zone: "utc",
+                      },
+                    )
+                      .setZone(
+                        timeOffRange.timeZone,
+                      )
+                      .toISO(),
+
+                  localEndsAt:
+                    DateTime.fromJSDate(
+                      conflictingTimeOff.endsAt,
+                      {
+                        zone: "utc",
+                      },
+                    )
+                      .setZone(
+                        timeOffRange.timeZone,
+                      )
+                      .toISO(),
+                }
+              : null,
+
+          conflictingAppointments:
+            conflictingAppointments.map(
+              (appointment) => ({
+                ...appointment,
+
+                localStartsAt:
+                  DateTime.fromJSDate(
+                    appointment.startsAt,
+                    {
+                      zone: "utc",
+                    },
+                  )
+                    .setZone(
+                      timeOffRange.timeZone,
+                    )
+                    .toISO(),
+
+                localEndsAt:
+                  DateTime.fromJSDate(
+                    appointment.endsAt,
+                    {
+                      zone: "utc",
+                    },
+                  )
+                    .setZone(
+                      timeOffRange.timeZone,
+                    )
+                    .toISO(),
+              }),
+            ),
+
+          conflictingAppointmentsCount:
+            conflictingAppointments.length,
+
+          canCreate:
+            !conflictingTimeOff,
+        },
+      });
+    } catch (error) {
+      console.error(
+        "Failed to preview time off:",
+        error,
+      );
+
+      res.status(500).json({
+        message:
+          "Unable to preview time off",
+      });
+    }
+  },
+);
+
+staffRouter.post(
+  "/time-off",
+  requireAuth,
+  requireRole("BARBER"),
+  async (req, res) => {
+    const parsedBody =
+      previewTimeOffSchema.safeParse(
+        req.body,
+      );
+
+    if (!parsedBody.success) {
+      res.status(400).json({
+        message:
+          "Invalid time off data",
+
+        errors:
+          parsedBody.error.flatten()
+            .fieldErrors,
+
+        issues:
+          parsedBody.error.issues,
+      });
+
+      return;
+    }
+
+    try {
+      const barberId =
+        await getAuthenticatedBarberId(
+          req.user!.id,
+        );
+
+      if (!barberId) {
+        res.status(403).json({
+          message:
+            "No active barber profile is linked to this account",
+        });
+
+        return;
+      }
+
+      const timeOffRange =
+        createTimeOffRange(
+          parsedBody.data,
+        );
+
+      if (!timeOffRange) {
+        res.status(400).json({
+          message:
+            "Unable to create a valid time off range",
+        });
+
+        return;
+      }
+
+      const rangeValidation =
+        validateTimeOffRange(
+          timeOffRange.startsAt,
+          timeOffRange.endsAt,
+          parsedBody.data.allDay,
+        );
+
+      if (!rangeValidation.valid) {
+        res.status(400).json({
+          message:
+            rangeValidation.message,
+        });
+
+        return;
+      }
+
+      const startsAt = timeOffRange.startsAt
+        .toUTC()
+        .toJSDate();
+
+      const endsAt = timeOffRange.endsAt
+        .toUTC()
+        .toJSDate();
+
+      const result =
+        await prisma.$transaction(
+          async (transaction) => {
+            /*
+             * Ξαναελέγχουμε μέσα στην transaction
+             * αν υπάρχει overlapping time off.
+             */
+            const overlappingTimeOff =
+              await transaction.timeOff.findFirst({
+                where: {
+                  barberId,
+
+                  startsAt: {
+                    lt: endsAt,
+                  },
+
+                  endsAt: {
+                    gt: startsAt,
+                  },
+                },
+
+                select: {
+                  id: true,
+                },
+              });
+
+            if (overlappingTimeOff) {
+              throw new TimeOffConflictError(
+                "A time off entry already exists for this period",
+              );
+            }
+
+            /*
+             * Βρίσκουμε τα appointments πριν τα
+             * ακυρώσουμε, ώστε να μπορούμε να τα
+             * επιστρέψουμε στο response.
+             */
+            const conflictingAppointments =
+              await transaction.appointment.findMany({
+                where: {
+                  barberId,
+
+                  status: {
+                    in: [
+                      "PENDING",
+                      "CONFIRMED",
+                    ],
+                  },
+
+                  startsAt: {
+                    lt: endsAt,
+                  },
+
+                  endsAt: {
+                    gt: startsAt,
+                  },
+                },
+
+                orderBy: {
+                  startsAt: "asc",
+                },
+
+                select:
+                  timeOffConflictAppointmentSelect,
+              });
+
+            const conflictingAppointmentIds =
+              conflictingAppointments.map(
+                (appointment) =>
+                  appointment.id,
+              );
+
+            if (
+              conflictingAppointmentIds.length >
+              0
+            ) {
+              await transaction.appointment.updateMany({
+                where: {
+                  id: {
+                    in: conflictingAppointmentIds,
+                  },
+
+                  /*
+                   * Επαναλαμβάνουμε το status check
+                   * ώστε να μην πειράξουμε appointment
+                   * που άλλαξε status στο μεταξύ.
+                   */
+                  status: {
+                    in: [
+                      "PENDING",
+                      "CONFIRMED",
+                    ],
+                  },
+                },
+
+                data: {
+                  status: "CANCELLED",
+
+                  cancelledAt:
+                    new Date(),
+
+                  cancelledBy:
+                    "BARBER",
+
+                  cancellationReason:
+                    TIME_OFF_CANCELLATION_REASON,
+                },
+              });
+            }
+
+            const createdTimeOff =
+              await transaction.timeOff.create({
+                data: {
+                  barberId,
+                  startsAt,
+                  endsAt,
+
+                  reason:
+                    parsedBody.data.reason
+                      ?.trim() || null,
+                },
+
+                select: timeOffSelect,
+              });
+
+            return {
+              createdTimeOff,
+              conflictingAppointments,
+            };
+          },
+          {
+            isolationLevel:
+              Prisma.TransactionIsolationLevel
+                .Serializable,
+          },
+        );
+
+      res.status(201).json({
+        message:
+          result.conflictingAppointments
+            .length > 0
+            ? "Time off created and conflicting appointments cancelled successfully"
+            : "Time off created successfully",
+
+        data: {
+          timeOff: formatTimeOff(
+            result.createdTimeOff,
+          ),
+
+          cancelledAppointments:
+            result.conflictingAppointments.map(
+              (appointment) => ({
+                ...appointment,
+
+                localStartsAt:
+                  DateTime.fromJSDate(
+                    appointment.startsAt,
+                    {
+                      zone: "utc",
+                    },
+                  )
+                    .setZone(
+                      timeOffRange.timeZone,
+                    )
+                    .toISO(),
+
+                localEndsAt:
+                  DateTime.fromJSDate(
+                    appointment.endsAt,
+                    {
+                      zone: "utc",
+                    },
+                  )
+                    .setZone(
+                      timeOffRange.timeZone,
+                    )
+                    .toISO(),
+              }),
+            ),
+
+          cancelledAppointmentsCount:
+            result.conflictingAppointments
+              .length,
+        },
+      });
+    } catch (error) {
+      if (
+        error instanceof
+        TimeOffConflictError
+      ) {
+        res.status(409).json({
+          message: error.message,
+        });
+
+        return;
+      }
+
+      console.error(
+        "Failed to create time off:",
+        error,
+      );
+
+      res.status(500).json({
+        message:
+          "Unable to create time off",
+      });
+    }
+  },
+);
+
+staffRouter.get(
+  "/time-off",
+  requireAuth,
+  requireRole("BARBER"),
+  async (req, res) => {
+    try {
+      const barberId =
+        await getAuthenticatedBarberId(
+          req.user!.id,
+        );
+
+      if (!barberId) {
+        res.status(403).json({
+          message:
+            "No active barber profile is linked to this account",
+        });
+
+        return;
+      }
+
+      const now = new Date();
+
+      const timeOffEntries =
+        await prisma.timeOff.findMany({
+          where: {
+            barberId,
+
+            endsAt: {
+              gt: now,
+            },
+          },
+
+          orderBy: {
+            startsAt: "asc",
+          },
+
+          select: timeOffSelect,
+        });
+
+      res.status(200).json({
+        data: {
+          timeOff:
+            timeOffEntries.map(
+              formatTimeOff,
+            ),
+        },
+      });
+    } catch (error) {
+      console.error(
+        "Failed to retrieve time off:",
+        error,
+      );
+
+      res.status(500).json({
+        message:
+          "Unable to retrieve time off",
+      });
+    }
+  },
+);
+
+staffRouter.delete(
+  "/time-off/:timeOffId",
+  requireAuth,
+  requireRole("BARBER"),
+  async (req, res) => {
+    const parsedParams =
+      timeOffParamsSchema.safeParse(
+        req.params,
+      );
+
+    if (!parsedParams.success) {
+      res.status(400).json({
+        message:
+          "Invalid time off id",
+
+        errors:
+          parsedParams.error.flatten()
+            .fieldErrors,
+      });
+
+      return;
+    }
+
+    try {
+      const barberId =
+        await getAuthenticatedBarberId(
+          req.user!.id,
+        );
+
+      if (!barberId) {
+        res.status(403).json({
+          message:
+            "No active barber profile is linked to this account",
+        });
+
+        return;
+      }
+
+      const timeOff =
+        await prisma.timeOff.findFirst({
+          where: {
+            id: parsedParams.data.timeOffId,
+            barberId,
+          },
+
+          select: {
+            id: true,
+            startsAt: true,
+            endsAt: true,
+          },
+        });
+
+      if (!timeOff) {
+        res.status(404).json({
+          message: "Time off not found",
+        });
+
+        return;
+      }
+
+      if (timeOff.endsAt <= new Date()) {
+        res.status(409).json({
+          message:
+            "Past time off entries cannot be deleted",
+        });
+
+        return;
+      }
+
+      await prisma.timeOff.delete({
+        where: {
+          id: timeOff.id,
+        },
+      });
+
+      res.status(200).json({
+        message:
+          "Time off deleted successfully",
+
+        data: {
+          id: timeOff.id,
+        },
+      });
+    } catch (error) {
+      console.error(
+        "Failed to delete time off:",
+        error,
+      );
+
+      res.status(500).json({
+        message:
+          "Unable to delete time off",
       });
     }
   },
@@ -581,6 +1491,9 @@ staffRouter.patch("/appointments/:appointmentId/status", requireAuth, requireRol
         return;
       }
 
+      const isCancellation = requestedStatus === "CANCELLED";
+
+
       const updatedAppointment =
         await prisma.appointment.update({
           where: {
@@ -589,7 +1502,23 @@ staffRouter.patch("/appointments/:appointmentId/status", requireAuth, requireRol
 
           data: {
             status: requestedStatus,
-          },
+
+            cancelledAt: isCancellation
+            ? new Date()
+            : null,
+
+            cancelledBy: isCancellation
+              ? req.user!.role === "ADMIN"
+                ? "ADMIN"
+                : "BARBER"
+              : null,
+
+            cancellationReason: isCancellation
+              ? req.user!.role === "ADMIN"
+                ? "Cancelled by administrator"
+                : "Cancelled by barber"
+              : null,
+                },
 
           select: appointmentSelect,
         });

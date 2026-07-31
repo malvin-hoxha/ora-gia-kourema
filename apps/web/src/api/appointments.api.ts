@@ -25,6 +25,17 @@ export type Appointment = {
   createdAt: string;
   timeZone: string;
 
+  cancelledAt: string | null;
+
+  cancelledBy:
+    | "CUSTOMER"
+    | "BARBER"
+    | "ADMIN"
+    | "SYSTEM"
+    | null;
+
+  cancellationReason: string | null;
+
   barber: {
     id: string;
     name: string;
@@ -59,6 +70,8 @@ type CancelAppointmentResponse = {
   message: string;
   data: Appointment;
 };
+
+
 
 export async function createAppointment(
   input: CreateAppointmentInput,

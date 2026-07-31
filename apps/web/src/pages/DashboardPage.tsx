@@ -7,6 +7,8 @@ import {
   ScissorsIcon,
   UserRoundIcon,
   XCircleIcon,
+  Building2Icon,
+  RefreshCcwIcon,
 } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
@@ -262,6 +264,70 @@ export function DashboardPage() {
   );
 }
 
+
+type CancellationDetails = {
+  title: string;
+  description: string;
+  tone: "customer" | "store" | "generic";
+};
+
+function getCancellationDetails(
+  appointment: Appointment,
+): CancellationDetails | null {
+  if (appointment.status !== "CANCELLED") {
+    return null;
+  }
+
+  if (appointment.cancelledBy === "CUSTOMER") {
+    return {
+      title: "Ακυρώθηκε από εσένα",
+      description:
+        "Το ραντεβού ακυρώθηκε από τον λογαριασμό σου.",
+      tone: "customer",
+    };
+  }
+
+  if (
+    appointment.cancelledBy === "BARBER" ||
+    appointment.cancelledBy === "ADMIN" ||
+    appointment.cancelledBy === "SYSTEM"
+  ) {
+    const isTimeOffCancellation =
+      appointment.cancellationReason ===
+      "Barber time off";
+
+    return {
+      title: "Ακυρώθηκε από το κατάστημα",
+      description: isTimeOffCancellation
+        ? "Το ραντεβού ακυρώθηκε λόγω αλλαγής στο πρόγραμμα του barber. Μπορείς να επιλέξεις νέα διαθέσιμη ώρα."
+        : appointment.cancellationReason ||
+          "Το ραντεβού ακυρώθηκε από το κατάστημα.",
+      tone: "store",
+    };
+  }
+
+  return {
+    title: "Το ραντεβού ακυρώθηκε",
+    description:
+      appointment.cancellationReason ||
+      "Δεν υπάρχουν διαθέσιμες περισσότερες πληροφορίες για την ακύρωση.",
+    tone: "generic",
+  };
+}
+
+function formatCancellationDate(
+  cancelledAt: string | null,
+) {
+  if (!cancelledAt) {
+    return null;
+  }
+
+  return new Intl.DateTimeFormat("el-GR", {
+    dateStyle: "long",
+    timeStyle: "short",
+  }).format(new Date(cancelledAt));
+}
+
 type AppointmentCardProps = {
   appointment: Appointment;
   showCancelButton: boolean;
@@ -295,6 +361,14 @@ function AppointmentCard({
     showCancelButton &&
     (appointment.status === "PENDING" ||
       appointment.status === "CONFIRMED");
+
+  const cancellationDetails =
+    getCancellationDetails(appointment);
+
+  const formattedCancellationDate =
+    formatCancellationDate(
+      appointment.cancelledAt,
+    );
 
   return (
     <article className="rounded-2xl border border-black/[0.06] bg-white p-5 transition hover:border-orange-100 hover:shadow-[0_12px_35px_rgba(15,23,42,0.06)] sm:p-6">
@@ -337,6 +411,63 @@ function AppointmentCard({
                 {appointment.notes}
               </p>
             )}
+
+            {cancellationDetails && (
+              <div
+                className={[
+                  "mt-5 max-w-2xl rounded-xl border px-4 py-4",
+                  cancellationDetails.tone === "store"
+                    ? "border-red-100 bg-red-50"
+                    : cancellationDetails.tone === "customer"
+                      ? "border-gray-200 bg-gray-50"
+                      : "border-amber-100 bg-amber-50",
+                ].join(" ")}
+              >
+                <div className="flex items-start gap-3">
+                  <div
+                    className={[
+                      "flex size-9 shrink-0 items-center justify-center rounded-full",
+                      cancellationDetails.tone === "store"
+                        ? "bg-white text-red-600"
+                        : cancellationDetails.tone === "customer"
+                          ? "bg-white text-gray-500"
+                          : "bg-white text-amber-600",
+                    ].join(" ")}
+                  >
+                    {cancellationDetails.tone === "store" ? (
+                      <Building2Icon className="size-4" />
+                    ) : (
+                      <XCircleIcon className="size-4" />
+                    )}
+                  </div>
+
+                  <div>
+                    <p
+                      className={[
+                        "text-sm font-semibold",
+                        cancellationDetails.tone === "store"
+                          ? "text-red-700"
+                          : cancellationDetails.tone === "customer"
+                            ? "text-slate-700"
+                            : "text-amber-700",
+                      ].join(" ")}
+                    >
+                      {cancellationDetails.title}
+                    </p>
+
+                    <p className="mt-1 text-sm leading-6 text-gray-600">
+                      {cancellationDetails.description}
+                    </p>
+
+                    {formattedCancellationDate && (
+                      <p className="mt-2 text-xs text-gray-400">
+                        Ακυρώθηκε στις {formattedCancellationDate}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -362,6 +493,16 @@ function AppointmentCard({
               <XCircleIcon className="size-4" />
               Ακύρωση
             </button>
+          )}
+
+          {appointment.status === "CANCELLED" && (
+            <Link
+              to="/booking"
+              className="inline-flex items-center gap-2 rounded-full bg-orange-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-orange-600"
+            >
+              <RefreshCcwIcon className="size-4" />
+              Κλείσε νέο
+            </Link>
           )}
         </div>
       </div>

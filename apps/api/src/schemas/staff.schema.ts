@@ -122,3 +122,74 @@ export const updateWorkingHoursSchema = z
       });
     }
   });
+
+  const dateSchema = z
+  .string()
+  .regex(
+    /^\d{4}-\d{2}-\d{2}$/,
+    "Date must use the YYYY-MM-DD format",
+  );
+
+export const previewTimeOffSchema = z
+  .object({
+    date: dateSchema,
+
+    allDay: z.boolean(),
+
+    startTime: timeSchema.nullable(),
+    endTime: timeSchema.nullable(),
+
+    reason: z
+      .string()
+      .trim()
+      .max(
+        250,
+        "Reason must contain at most 250 characters",
+      )
+      .nullable()
+      .optional(),
+  })
+  .superRefine((data, context) => {
+    if (data.allDay) {
+      return;
+    }
+
+    if (!data.startTime) {
+      context.addIssue({
+        code: "custom",
+        path: ["startTime"],
+        message:
+          "startTime is required when allDay is false",
+      });
+    }
+
+    if (!data.endTime) {
+      context.addIssue({
+        code: "custom",
+        path: ["endTime"],
+        message:
+          "endTime is required when allDay is false",
+      });
+    }
+
+    if (
+      data.startTime &&
+      data.endTime &&
+      data.startTime >= data.endTime
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["endTime"],
+        message:
+          "endTime must be later than startTime",
+      });
+    }
+  });
+
+
+  export const timeOffParamsSchema = z.object({
+  timeOffId: z
+    .string()
+    .trim()
+    .min(1, "timeOffId is required"),
+});

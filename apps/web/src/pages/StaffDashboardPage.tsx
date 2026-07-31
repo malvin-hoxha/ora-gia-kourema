@@ -1,22 +1,35 @@
 import { CalendarDaysIcon, CheckCircle2Icon, ChevronLeftIcon, ChevronRightIcon, CircleAlertIcon,
   Clock3Icon, HistoryIcon, LoaderCircleIcon, MailIcon, PhoneIcon, ScissorsIcon, UserRoundIcon, XCircleIcon,
-  CalendarClockIcon, SaveIcon,
+  CalendarClockIcon, SaveIcon, CalendarOffIcon, Trash2Icon, PlusIcon, AlertTriangleIcon,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { ApiError } from "../api/api-client";
-import type { StaffAppointment, StaffAppointmentStatus, UpdateAppointmentStatus, WorkingDay} from "../api/staff.api";
+import type {
+  StaffAppointment,
+  StaffAppointmentStatus,
+  UpdateAppointmentStatus,
+  WorkingDay,
+  TimeOffInput,
+  TimeOffPreview,
+  StaffTimeOff,
+} from "../api/staff.api";
 import { useAuth } from "../auth/useAuth";
 import { useStaffAppointments } from "../hooks/useStaffAppointments";
 import { useUpdateStaffAppointmentStatus } from "../hooks/useUpdateStaffAppointmentStatus";
 import { useStaffWorkingHours } from "../hooks/useStaffWorkingHours";
 import { useUpdateStaffWorkingHours } from "../hooks/useUpdateStaffWorkingHours";
+import { useStaffTimeOff } from "../hooks/useStaffTimeOff";
+import { usePreviewStaffTimeOff } from "../hooks/usePreviewStaffTimeOff";
+import { useCreateStaffTimeOff } from "../hooks/useCreateStaffTimeOff";
+import { useDeleteStaffTimeOff } from "../hooks/useDeleteStaffTimeOff";
 
 type StatusFilter = | "" | StaffAppointmentStatus;
 
 type StaffDashboardTab =
   | "appointments"
-  | "working-hours";
+  | "working-hours"
+  | "time-off";
 
 const currencyFormatter = new Intl.NumberFormat("el-GR", {
     style: "currency",
@@ -215,19 +228,35 @@ export function StaffDashboardPage() {
               </button>
 
               {user?.role === "BARBER" && (
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("working-hours")}
-                  className={[
-                    "inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition",
-                    activeTab === "working-hours"
-                      ? "bg-slate-900 text-white"
-                      : "text-gray-500 hover:text-slate-900",
-                  ].join(" ")}
-                >
-                  <CalendarClockIcon className="size-4" />
-                  Ωράριο
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("working-hours")}
+                    className={[
+                      "inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition",
+                      activeTab === "working-hours"
+                        ? "bg-slate-900 text-white"
+                        : "text-gray-500 hover:text-slate-900",
+                    ].join(" ")}
+                  >
+                    <CalendarClockIcon className="size-4" />
+                    Ωράριο
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("time-off")}
+                    className={[
+                      "inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition",
+                      activeTab === "time-off"
+                        ? "bg-slate-900 text-white"
+                        : "text-gray-500 hover:text-slate-900",
+                    ].join(" ")}
+                  >
+                    <CalendarOffIcon className="size-4" />
+                    Άδειες
+                  </button>
+                </>
               )}
             </div>
           </div>
@@ -306,6 +335,11 @@ export function StaffDashboardPage() {
             {activeTab === "working-hours" &&
               user?.role === "BARBER" && (
                 <WorkingHoursPanel />
+              )}
+
+            {activeTab === "time-off" &&
+              user?.role === "BARBER" && (
+                <TimeOffPanel />
               )}
           </div>
         </section>
@@ -705,6 +739,819 @@ function WorkingHoursLoading() {
           />
         ),
       )}
+    </div>
+  );
+}
+
+
+const TIME_OFF_WINDOW_DAYS = 14;
+
+function getMaximumTimeOffDate() {
+  const maximumDate = new Date();
+
+  maximumDate.setDate(
+    maximumDate.getDate() +
+      TIME_OFF_WINDOW_DAYS,
+  );
+
+  return toDateInputValue(maximumDate);
+}
+
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat(
+    "el-GR",
+    {
+      dateStyle: "long",
+      timeStyle: "short",
+    },
+  ).format(new Date(value));
+}
+
+function formatTime(value: string) {
+  return new Intl.DateTimeFormat(
+    "el-GR",
+    {
+      hour: "2-digit",
+      minute: "2-digit",
+    },
+  ).format(new Date(value));
+}
+
+function isAllDayTimeOff(timeOff: StaffTimeOff) {
+  const startsAt = new Date(
+    timeOff.localStartsAt,
+  );
+
+  const endsAt = new Date(
+    timeOff.localEndsAt,
+  );
+
+  return (
+    startsAt.getHours() === 0 &&
+    startsAt.getMinutes() === 0 &&
+    endsAt.getHours() === 0 &&
+    endsAt.getMinutes() === 0
+  );
+}
+
+function TimeOffPanel() {
+  const timeOffQuery = useStaffTimeOff();
+  const previewMutation =
+    usePreviewStaffTimeOff();
+  const createMutation =
+    useCreateStaffTimeOff();
+  const deleteMutation =
+    useDeleteStaffTimeOff();
+
+  const [form, setForm] =
+    useState<TimeOffInput>({
+      date: addDays(
+        toDateInputValue(new Date()),
+        1,
+      ),
+      allDay: true,
+      startTime: null,
+      endTime: null,
+      reason: null,
+    });
+
+  const [preview, setPreview] =
+    useState<TimeOffPreview | null>(
+      null,
+    );
+
+  const [timeOffToDelete, setTimeOffToDelete] =
+    useState<StaffTimeOff | null>(
+      null,
+    );
+
+  function updateForm(
+    changes: Partial<TimeOffInput>,
+  ) {
+    setForm((current) => ({
+      ...current,
+      ...changes,
+    }));
+
+    previewMutation.reset();
+    createMutation.reset();
+    setPreview(null);
+  }
+
+  function validateForm() {
+    if (!form.date) {
+      return "Επίλεξε ημερομηνία.";
+    }
+
+    if (!form.allDay) {
+      if (
+        !form.startTime ||
+        !form.endTime
+      ) {
+        return "Συμπλήρωσε ώρα έναρξης και λήξης.";
+      }
+
+      if (
+        form.startTime >= form.endTime
+      ) {
+        return "Η ώρα λήξης πρέπει να είναι αργότερα από την ώρα έναρξης.";
+      }
+    }
+
+    return null;
+  }
+
+  const formError = validateForm();
+
+  async function previewTimeOff() {
+    if (formError) {
+      return;
+    }
+
+    try {
+      const result =
+        await previewMutation.mutateAsync(
+          form,
+        );
+
+      setPreview(result);
+    } catch {
+      // Το error εμφανίζεται μέσα στο panel.
+    }
+  }
+
+  async function createTimeOff() {
+    if (!preview?.canCreate) {
+      return;
+    }
+
+    try {
+      await createMutation.mutateAsync(
+        form,
+      );
+
+      setPreview(null);
+
+      setForm({
+        date: addDays(
+          toDateInputValue(new Date()),
+          1,
+        ),
+        allDay: true,
+        startTime: null,
+        endTime: null,
+        reason: null,
+      });
+    } catch {
+      // Το error εμφανίζεται μέσα στο modal.
+    }
+  }
+
+  async function confirmDeleteTimeOff() {
+    if (!timeOffToDelete) {
+      return;
+    }
+
+    try {
+      await deleteMutation.mutateAsync(
+        timeOffToDelete.id,
+      );
+
+      setTimeOffToDelete(null);
+    } catch {
+      // Το error εμφανίζεται μέσα στο modal.
+    }
+  }
+
+  const timeOffEntries =
+    timeOffQuery.data ?? [];
+
+  return (
+    <section>
+      <div>
+        <h2 className="font-serif text-3xl text-slate-900">
+          Άδειες και day off
+        </h2>
+
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-500">
+          Δήλωσε άδεια έως 14 ημέρες μπροστά.
+          Αν υπάρχουν επιβεβαιωμένα ή εκκρεμή
+          ραντεβού, θα εμφανιστούν πριν από την
+          οριστική επιβεβαίωση και θα ακυρωθούν
+          αυτόματα.
+        </p>
+      </div>
+
+      <div className="mt-7 grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(340px,0.85fr)]">
+        <div className="rounded-2xl border border-black/[0.06] bg-white p-5 sm:p-6">
+          <div className="flex items-center gap-3">
+            <div className="flex size-11 items-center justify-center rounded-full bg-orange-50 text-orange-500">
+              <PlusIcon className="size-5" />
+            </div>
+
+            <div>
+              <h3 className="font-serif text-2xl text-slate-900">
+                Νέα άδεια
+              </h3>
+
+              <p className="mt-1 text-sm text-gray-400">
+                Επίλεξε ημερομηνία, ώρες και λόγο.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-6 grid gap-5">
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">
+                Ημερομηνία
+              </span>
+
+              <div className="mt-2 flex items-center gap-3 rounded-xl border border-black/10 bg-white px-4 focus-within:border-orange-300 focus-within:ring-4 focus-within:ring-orange-50">
+                <CalendarDaysIcon className="size-4 text-orange-500" />
+
+                <input
+                  type="date"
+                  min={toDateInputValue(
+                    new Date(),
+                  )}
+                  max={getMaximumTimeOffDate()}
+                  value={form.date}
+                  onChange={(event) =>
+                    updateForm({
+                      date:
+                        event.target.value,
+                    })
+                  }
+                  className="h-12 flex-1 bg-transparent text-sm text-slate-800 outline-none"
+                />
+              </div>
+
+              <p className="mt-2 text-xs leading-5 text-gray-400">
+                Διαθέσιμες ημερομηνίες έως{" "}
+                <span className="font-semibold text-slate-600">
+                  {formatSelectedDate(
+                    getMaximumTimeOffDate(),
+                  )}
+                </span>
+                .
+              </p>
+            </label>
+
+            <div className="rounded-xl border border-black/[0.06] bg-gray-50 p-4">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">
+                    Όλη την ημέρα
+                  </p>
+
+                  <p className="mt-1 text-xs text-gray-400">
+                    Μπλοκάρει όλα τα διαθέσιμα
+                    slots της ημέρας.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={form.allDay}
+                  onClick={() =>
+                    updateForm({
+                      allDay:
+                        !form.allDay,
+                      startTime:
+                        form.allDay
+                          ? "09:00"
+                          : null,
+                      endTime:
+                        form.allDay
+                          ? "18:00"
+                          : null,
+                    })
+                  }
+                  className={[
+                    "relative h-7 w-12 shrink-0 rounded-full transition",
+                    form.allDay
+                      ? "bg-orange-500"
+                      : "bg-gray-200",
+                  ].join(" ")}
+                >
+                  <span
+                    className={[
+                      "absolute top-1 size-5 rounded-full bg-white shadow-sm transition",
+                      form.allDay
+                        ? "left-6"
+                        : "left-1",
+                    ].join(" ")}
+                  />
+                </button>
+              </div>
+            </div>
+
+            {!form.allDay && (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <TimeField
+                  label="Έναρξη"
+                  value={
+                    form.startTime ??
+                    "09:00"
+                  }
+                  onChange={(startTime) =>
+                    updateForm({
+                      startTime,
+                    })
+                  }
+                />
+
+                <TimeField
+                  label="Λήξη"
+                  value={
+                    form.endTime ??
+                    "18:00"
+                  }
+                  onChange={(endTime) =>
+                    updateForm({
+                      endTime,
+                    })
+                  }
+                />
+              </div>
+            )}
+
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">
+                Λόγος
+              </span>
+
+              <textarea
+                value={form.reason ?? ""}
+                maxLength={250}
+                onChange={(event) =>
+                  updateForm({
+                    reason:
+                      event.target.value ||
+                      null,
+                  })
+                }
+                placeholder="π.χ. Προσωπική υποχρέωση"
+                className="mt-2 min-h-28 w-full resize-y rounded-xl border border-black/10 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition placeholder:text-gray-300 focus:border-orange-300 focus:ring-4 focus:ring-orange-50"
+              />
+
+              <p className="mt-1 text-right text-xs text-gray-400">
+                {(form.reason ?? "").length}
+                /250
+              </p>
+            </label>
+          </div>
+
+          {formError && (
+            <div className="mt-5 rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+              {formError}
+            </div>
+          )}
+
+          {previewMutation.error && (
+            <div className="mt-5 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
+              {previewMutation.error
+                instanceof ApiError
+                ? previewMutation.error
+                    .message
+                : "Δεν ήταν δυνατός ο έλεγχος της άδειας."}
+            </div>
+          )}
+
+          {createMutation.isSuccess && (
+            <div className="mt-5 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
+              Η άδεια δημιουργήθηκε επιτυχώς.
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={() => {
+              void previewTimeOff();
+            }}
+            disabled={
+              Boolean(formError) ||
+              previewMutation.isPending
+            }
+            className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full bg-orange-500 px-6 py-3 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {previewMutation.isPending ? (
+              <LoaderCircleIcon className="size-4 animate-spin" />
+            ) : (
+              <AlertTriangleIcon className="size-4" />
+            )}
+
+            Έλεγχος και συνέχεια
+          </button>
+        </div>
+
+        <div className="rounded-2xl border border-black/[0.06] bg-white p-5 sm:p-6">
+          <div className="flex items-center gap-3">
+            <div className="flex size-11 items-center justify-center rounded-full bg-slate-100 text-slate-700">
+              <CalendarOffIcon className="size-5" />
+            </div>
+
+            <div>
+              <h3 className="font-serif text-2xl text-slate-900">
+                Επερχόμενες άδειες
+              </h3>
+
+              <p className="mt-1 text-sm text-gray-400">
+                {timeOffEntries.length} συνολικά
+              </p>
+            </div>
+          </div>
+
+          {timeOffQuery.isPending && (
+            <div className="mt-6 grid gap-3">
+              {[1, 2, 3].map((item) => (
+                <div
+                  key={item}
+                  className="min-h-28 animate-pulse rounded-xl bg-gray-50"
+                />
+              ))}
+            </div>
+          )}
+
+          {timeOffQuery.isError && (
+            <div className="mt-6 rounded-xl border border-red-100 bg-red-50 p-5 text-center">
+              <p className="text-sm font-semibold text-red-700">
+                Δεν ήταν δυνατή η φόρτωση των αδειών.
+              </p>
+
+              <button
+                type="button"
+                onClick={() => {
+                  void timeOffQuery.refetch();
+                }}
+                className="mt-3 text-sm font-semibold text-red-600 underline underline-offset-4"
+              >
+                Προσπάθησε ξανά
+              </button>
+            </div>
+          )}
+
+          {!timeOffQuery.isPending &&
+            !timeOffQuery.isError &&
+            timeOffEntries.length === 0 && (
+              <div className="mt-6 rounded-xl border border-dashed border-black/10 bg-gray-50 p-8 text-center">
+                <CalendarOffIcon className="mx-auto size-7 text-gray-300" />
+
+                <p className="mt-4 text-sm font-semibold text-slate-700">
+                  Δεν υπάρχουν επερχόμενες άδειες.
+                </p>
+              </div>
+            )}
+
+          {!timeOffQuery.isPending &&
+            !timeOffQuery.isError &&
+            timeOffEntries.length > 0 && (
+              <div className="mt-6 grid gap-3">
+                {timeOffEntries.map(
+                  (timeOff) => (
+                    <TimeOffCard
+                      key={timeOff.id}
+                      timeOff={timeOff}
+                      onDelete={() => {
+                        deleteMutation.reset();
+                        setTimeOffToDelete(
+                          timeOff,
+                        );
+                      }}
+                    />
+                  ),
+                )}
+              </div>
+            )}
+        </div>
+      </div>
+
+      {preview && (
+        <TimeOffPreviewModal
+          preview={preview}
+          isPending={
+            createMutation.isPending
+          }
+          error={createMutation.error}
+          onClose={() => {
+            if (!createMutation.isPending) {
+              setPreview(null);
+              createMutation.reset();
+            }
+          }}
+          onConfirm={() => {
+            void createTimeOff();
+          }}
+        />
+      )}
+
+      {timeOffToDelete && (
+        <DeleteTimeOffModal
+          timeOff={timeOffToDelete}
+          isPending={
+            deleteMutation.isPending
+          }
+          error={deleteMutation.error}
+          onClose={() => {
+            if (!deleteMutation.isPending) {
+              setTimeOffToDelete(null);
+              deleteMutation.reset();
+            }
+          }}
+          onConfirm={() => {
+            void confirmDeleteTimeOff();
+          }}
+        />
+      )}
+    </section>
+  );
+}
+
+function TimeOffCard({
+  timeOff,
+  onDelete,
+}: {
+  timeOff: StaffTimeOff;
+  onDelete: () => void;
+}) {
+  const allDay =
+    isAllDayTimeOff(timeOff);
+
+  return (
+    <article className="rounded-xl border border-black/[0.06] bg-gray-50 p-4">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="font-semibold text-slate-800">
+            {new Intl.DateTimeFormat(
+              "el-GR",
+              {
+                weekday: "long",
+                day: "numeric",
+                month: "long",
+              },
+            ).format(
+              new Date(
+                timeOff.localStartsAt,
+              ),
+            )}
+          </p>
+
+          <p className="mt-1 text-sm text-gray-500">
+            {allDay
+              ? "Όλη την ημέρα"
+              : `${formatTime(
+                  timeOff.localStartsAt,
+                )} – ${formatTime(
+                  timeOff.localEndsAt,
+                )}`}
+          </p>
+
+          {timeOff.reason && (
+            <p className="mt-3 text-sm leading-6 text-gray-500">
+              {timeOff.reason}
+            </p>
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={onDelete}
+          className="flex size-9 shrink-0 items-center justify-center rounded-full border border-red-100 bg-white text-red-500 transition hover:bg-red-50"
+          aria-label="Διαγραφή άδειας"
+        >
+          <Trash2Icon className="size-4" />
+        </button>
+      </div>
+    </article>
+  );
+}
+
+function TimeOffPreviewModal({
+  preview,
+  isPending,
+  error,
+  onClose,
+  onConfirm,
+}: {
+  preview: TimeOffPreview;
+  isPending: boolean;
+  error: Error | null;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const conflicts =
+    preview.conflictingAppointments;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-5 py-8 backdrop-blur-sm">
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="max-h-full w-full max-w-2xl overflow-y-auto rounded-3xl border border-black/[0.07] bg-white p-7 shadow-[0_30px_100px_rgba(15,23,42,0.25)]"
+      >
+        <div
+          className={[
+            "flex size-12 items-center justify-center rounded-full",
+            conflicts.length > 0
+              ? "bg-amber-50 text-amber-600"
+              : "bg-emerald-50 text-emerald-600",
+          ].join(" ")}
+        >
+          {conflicts.length > 0 ? (
+            <AlertTriangleIcon className="size-6" />
+          ) : (
+            <CheckCircle2Icon className="size-6" />
+          )}
+        </div>
+
+        <h2 className="mt-6 font-serif text-3xl text-slate-900">
+          {conflicts.length > 0
+            ? `Θα ακυρωθούν ${conflicts.length} ραντεβού`
+            : "Η άδεια είναι διαθέσιμη"}
+        </h2>
+
+        <p className="mt-3 text-sm leading-6 text-gray-500">
+          {formatDateTime(
+            preview.proposedTimeOff
+              .localStartsAt,
+          )}{" "}
+          έως{" "}
+          {formatDateTime(
+            preview.proposedTimeOff
+              .localEndsAt,
+          )}
+        </p>
+
+        {preview.conflictingTimeOff && (
+          <div className="mt-5 rounded-xl border border-red-100 bg-red-50 p-4 text-sm text-red-700">
+            Υπάρχει ήδη άλλη άδεια που
+            επικαλύπτεται με αυτό το διάστημα.
+          </div>
+        )}
+
+        {conflicts.length > 0 && (
+          <div className="mt-6 grid gap-3">
+            {conflicts.map(
+              (appointment) => (
+                <div
+                  key={appointment.id}
+                  className="rounded-xl border border-amber-100 bg-amber-50/60 p-4"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-slate-800">
+                        {
+                          appointment.customer
+                            .name
+                        }
+                      </p>
+
+                      <p className="mt-1 text-sm text-gray-500">
+                        {
+                          appointment.service
+                            .name
+                        }
+                      </p>
+                    </div>
+
+                    <span className="rounded-full border border-amber-100 bg-white px-3 py-1 text-xs font-semibold text-amber-700">
+                      {formatTime(
+                        appointment.localStartsAt,
+                      )}{" "}
+                      –{" "}
+                      {formatTime(
+                        appointment.localEndsAt,
+                      )}
+                    </span>
+                  </div>
+                </div>
+              ),
+            )}
+          </div>
+        )}
+
+        {error && (
+          <div className="mt-5 rounded-xl border border-red-100 bg-red-50 p-4 text-sm text-red-600">
+            {error instanceof ApiError
+              ? error.message
+              : "Δεν ήταν δυνατή η δημιουργία της άδειας."}
+          </div>
+        )}
+
+        <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            disabled={isPending}
+            onClick={onClose}
+            className="rounded-full border border-black/10 bg-white px-5 py-2.5 text-sm font-semibold text-gray-600 transition hover:bg-gray-50 disabled:opacity-50"
+          >
+            Επιστροφή
+          </button>
+
+          <button
+            type="button"
+            disabled={
+              isPending ||
+              !preview.canCreate
+            }
+            onClick={onConfirm}
+            className="inline-flex items-center justify-center gap-2 rounded-full bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isPending && (
+              <LoaderCircleIcon className="size-4 animate-spin" />
+            )}
+
+            {conflicts.length > 0
+              ? "Δημιουργία και ακύρωση"
+              : "Δημιουργία άδειας"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DeleteTimeOffModal({
+  timeOff,
+  isPending,
+  error,
+  onClose,
+  onConfirm,
+}: {
+  timeOff: StaffTimeOff;
+  isPending: boolean;
+  error: Error | null;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-5 backdrop-blur-sm">
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="w-full max-w-md rounded-3xl border border-black/[0.07] bg-white p-7 shadow-[0_30px_100px_rgba(15,23,42,0.25)]"
+      >
+        <div className="flex size-12 items-center justify-center rounded-full bg-red-50 text-red-600">
+          <Trash2Icon className="size-6" />
+        </div>
+
+        <h2 className="mt-6 font-serif text-3xl text-slate-900">
+          Διαγραφή άδειας
+        </h2>
+
+        <p className="mt-3 text-sm leading-6 text-gray-500">
+          Τα slots θα γίνουν ξανά διαθέσιμα.
+          Τα ραντεβού που είχαν ήδη ακυρωθεί
+          δεν θα επανέλθουν αυτόματα.
+        </p>
+
+        <div className="mt-5 rounded-2xl bg-gray-50 p-4">
+          <p className="font-semibold text-slate-800">
+            {formatDateTime(
+              timeOff.localStartsAt,
+            )}
+          </p>
+
+          {timeOff.reason && (
+            <p className="mt-2 text-sm text-gray-500">
+              {timeOff.reason}
+            </p>
+          )}
+        </div>
+
+        {error && (
+          <div className="mt-5 rounded-xl border border-red-100 bg-red-50 p-4 text-sm text-red-600">
+            {error instanceof ApiError
+              ? error.message
+              : "Δεν ήταν δυνατή η διαγραφή της άδειας."}
+          </div>
+        )}
+
+        <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            disabled={isPending}
+            onClick={onClose}
+            className="rounded-full border border-black/10 bg-white px-5 py-2.5 text-sm font-semibold text-gray-600 transition hover:bg-gray-50 disabled:opacity-50"
+          >
+            Επιστροφή
+          </button>
+
+          <button
+            type="button"
+            disabled={isPending}
+            onClick={onConfirm}
+            className="inline-flex items-center justify-center gap-2 rounded-full bg-red-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isPending && (
+              <LoaderCircleIcon className="size-4 animate-spin" />
+            )}
+
+            Διαγραφή
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
