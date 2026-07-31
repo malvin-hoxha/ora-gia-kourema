@@ -10,6 +10,7 @@ import { StaffDashboardPage } from "./pages/StaffDashboardPage";
 import { AdminRoute } from "./auth/AdminRoute";
 import { AdminDashboardPage } from "./pages/AdminDashboardPage";
 
+
 const App = () => {
   return (
     <Routes>
@@ -26,7 +27,7 @@ const App = () => {
       <Route
         path="/booking"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute allowedRoles={["CUSTOMER"]}>
             <BookingPage />
           </ProtectedRoute>
         }

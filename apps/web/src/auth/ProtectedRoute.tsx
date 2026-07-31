@@ -7,12 +7,13 @@ import { useAuth } from "./useAuth";
 
 type ProtectedRouteProps = {
   children: React.ReactNode;
+  allowedRoles?: Array<"CUSTOMER" | "BARBER" | "ADMIN">;
 };
 
-export function ProtectedRoute({children}: ProtectedRouteProps) {
+export function ProtectedRoute({children, allowedRoles}: ProtectedRouteProps) {
     const location = useLocation(); //information about current URL, we need the e.g. pathname='/appointments'
-    
     const {
+        user,
         isAuthenticated,
         isLoading,
     } = useAuth();
@@ -32,6 +33,17 @@ export function ProtectedRoute({children}: ProtectedRouteProps) {
             //state => redirect to where user was before login
         )
     }
+
+    if ( user && allowedRoles && !allowedRoles.includes(user.role)) {
+        return (
+            <Navigate
+            to={'/'}
+            replace
+            />
+        );
+    }
+
+    
 
     return children;
 }

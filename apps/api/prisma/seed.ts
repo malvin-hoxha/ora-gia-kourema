@@ -28,14 +28,14 @@ const servicesData = [
   {
     name: "Haircut & Beard",
     description: "Ολοκληρωμένη περιποίηση για μαλλιά και γένια.",
-    durationMinutes: 45,
+    durationMinutes: 30,
     price: 22,
     active: true,
   },
   {
     name: "Beard Trim",
     description: "Σχηματισμός και περιποίηση γενειάδας.",
-    durationMinutes: 20,
+    durationMinutes: 30,
     price: 10,
     active: true,
   },
@@ -266,11 +266,42 @@ async function seedBarberAccounts() {
   }
 }
 
+async function seedAdminAccount() {
+  const passwordHash = await argon2.hash(
+    "Admin123!",
+    {
+      type: argon2.argon2id,
+    },
+  );
+
+  await prisma.user.upsert({
+    where: {
+      email: "admin@oragiakourema.local",
+    },
+
+    update: {
+      name: "OraGiaKourema Admin",
+      role: "ADMIN",
+      passwordHash,
+      phone: null,
+    },
+
+    create: {
+      name: "OraGiaKourema Admin",
+      email: "admin@oragiakourema.local",
+      role: "ADMIN",
+      passwordHash,
+      phone: null,
+    },
+  });
+}
+
 async function main() {
   await seedServices();
   await seedBarbers();
   await seedBarberAccounts();
   await seedDemoCustomer();
+  await seedAdminAccount();
   
   console.log("Database seeded successfully.");
 }

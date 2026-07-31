@@ -10,6 +10,11 @@ import {
   StoreIcon,
   UserRoundIcon,
   UsersRoundIcon,
+  ListChecksIcon,
+  UserCogIcon,
+  PlusIcon,
+  PencilIcon,
+  PowerIcon,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
@@ -18,6 +23,10 @@ import type {
   AdminAppointment,
   AdminAppointmentStatus,
 } from "../api/admin.api";
+import type {
+  AdminService,
+  AdminServiceInput,
+} from "../api/admin-services.api";
 import { useAuth } from "../auth/useAuth";
 import { useAdminAppointments } from "../hooks/useAdminAppointments";
 import { useAdminOverview } from "../hooks/useAdminOverview";
@@ -25,10 +34,20 @@ import { useBarbers } from "../hooks/useBarbers";
 import {
   useUpdateAdminAppointmentStatus,
 } from "../hooks/useUpdateAdminAppointmentStatus";
+import { useAdminServices } from "../hooks/useAdminServices";
+import { useCreateAdminService } from "../hooks/useCreateAdminService";
+import { useUpdateAdminService } from "../hooks/useUpdateAdminService";
+import { AdminBarbersPanel } from "../components/AdminBarbersPanel";
 
 import type {
   UpdateAdminAppointmentStatus,
 } from "../api/admin.api";
+
+type AdminDashboardTab =
+  | "overview"
+  | "appointments"
+  | "services"
+  | "barbers";
 
 type StatusFilter =
   | ""
@@ -86,6 +105,9 @@ const statusOptions: Array<{
 
 export function AdminDashboardPage() {
   const { user, logout } = useAuth();
+
+  const [activeTab, setActiveTab] =
+    useState<AdminDashboardTab>("overview");
 
   const [selectedDate, setSelectedDate] =
     useState(() =>
@@ -216,11 +238,43 @@ export function AdminDashboardPage() {
           </p>
         </section>
 
-        {overviewQuery.isPending && (
+        <nav className="mt-8 flex flex-wrap gap-2 rounded-2xl border border-black/[0.07] bg-white p-2 shadow-sm">
+          <AdminTabButton
+            active={activeTab === "overview"}
+            icon={<StoreIcon className="size-4" />}
+            label="Επισκόπηση"
+            onClick={() => setActiveTab("overview")}
+          />
+
+          <AdminTabButton
+            active={activeTab === "appointments"}
+            icon={<CalendarDaysIcon className="size-4" />}
+            label="Ραντεβού"
+            onClick={() => setActiveTab("appointments")}
+          />
+
+          <AdminTabButton
+            active={activeTab === "services"}
+            icon={<ListChecksIcon className="size-4" />}
+            label="Υπηρεσίες"
+            onClick={() => setActiveTab("services")}
+          />
+
+          <AdminTabButton
+            active={activeTab === "barbers"}
+            icon={<UserCogIcon className="size-4" />}
+            label="Barbers"
+            onClick={() => setActiveTab("barbers")}
+          />
+        </nav>
+
+        {activeTab === "overview" &&
+          overviewQuery.isPending && (
           <OverviewLoading />
         )}
 
-        {overviewQuery.isError && (
+        {activeTab === "overview" &&
+          overviewQuery.isError && (
           <div className="mt-8 rounded-2xl border border-red-100 bg-red-50 p-7 text-center">
             <p className="font-semibold text-red-700">
               Δεν ήταν δυνατή η φόρτωση των
@@ -239,7 +293,8 @@ export function AdminDashboardPage() {
           </div>
         )}
 
-        {overview && (
+        {activeTab === "overview" &&
+          overview && (
           <section className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <OverviewCard
               icon={
@@ -325,7 +380,8 @@ export function AdminDashboardPage() {
           </section>
         )}
 
-        <section className="mt-10 overflow-hidden rounded-3xl border border-black/[0.07] bg-white shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
+        {activeTab === "appointments" && (
+        <section className="mt-8 overflow-hidden rounded-3xl border border-black/[0.07] bg-white shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
           <div className="flex items-center gap-2 border-b border-black/5 bg-[#f0f0f0] px-4 py-3">
             <div className="size-3 rounded-full bg-red-400" />
             <div className="size-3 rounded-full bg-amber-400" />
@@ -441,6 +497,15 @@ export function AdminDashboardPage() {
               )}
           </div>
         </section>
+        )}
+
+        {activeTab === "services" && (
+          <AdminServicesPanel />
+        )}
+
+        {activeTab === "barbers" && (
+          <AdminBarbersPanel />
+        )}
       </div>
 
       {pendingStatusChange && (
@@ -469,6 +534,571 @@ export function AdminDashboardPage() {
         />
       )}
     </main>
+  );
+}
+
+
+function AdminTabButton({
+  active,
+  icon,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  icon: ReactNode;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={[
+        "inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition",
+        active
+          ? "bg-slate-900 text-white"
+          : "text-gray-500 hover:bg-gray-50 hover:text-slate-900",
+      ].join(" ")}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}
+
+type ServiceModalState =
+  | {
+      mode: "create";
+    }
+  | {
+      mode: "edit";
+      service: AdminService;
+    }
+  | null;
+
+function AdminServicesPanel() {
+  const servicesQuery = useAdminServices();
+  const createServiceMutation =
+    useCreateAdminService();
+  const updateServiceMutation =
+    useUpdateAdminService();
+
+  const [modal, setModal] =
+    useState<ServiceModalState>(null);
+
+  const services =
+    servicesQuery.data?.services ?? [];
+
+  async function toggleService(
+    service: AdminService,
+  ) {
+    try {
+      await updateServiceMutation.mutateAsync({
+        serviceId: service.id,
+        data: {
+          active: !service.active,
+        },
+      });
+    } catch {
+      // Το error εμφανίζεται κάτω από τη λίστα.
+    }
+  }
+
+  return (
+    <section className="mt-8 overflow-hidden rounded-3xl border border-black/[0.07] bg-white shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
+      <div className="flex items-center gap-2 border-b border-black/5 bg-[#f0f0f0] px-4 py-3">
+        <div className="size-3 rounded-full bg-red-400" />
+        <div className="size-3 rounded-full bg-amber-400" />
+        <div className="size-3 rounded-full bg-emerald-400" />
+
+        <div className="mx-4 h-5 max-w-sm flex-1 rounded-md bg-white/80" />
+
+        <span className="hidden text-xs font-medium text-gray-400 sm:block">
+          Διαχείριση υπηρεσιών
+        </span>
+      </div>
+
+      <div className="bg-[#f7f7f7] p-4 sm:p-7">
+        <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
+          <div>
+            <h2 className="font-serif text-3xl text-slate-900">
+              Υπηρεσίες
+            </h2>
+
+            <p className="mt-2 max-w-xl text-sm leading-6 text-gray-500">
+              Δημιούργησε και επεξεργάσου τις
+              υπηρεσίες του καταστήματος. Η
+              διάρκεια είναι σταθερή στα 30 λεπτά.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              createServiceMutation.reset();
+              setModal({
+                mode: "create",
+              });
+            }}
+            className="inline-flex items-center justify-center gap-2 rounded-full bg-orange-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-orange-600"
+          >
+            <PlusIcon className="size-4" />
+            Νέα υπηρεσία
+          </button>
+        </div>
+
+        {servicesQuery.isPending && (
+          <div className="mt-7 grid gap-4 md:grid-cols-2">
+            {[1, 2, 3, 4].map((item) => (
+              <div
+                key={item}
+                className="min-h-48 animate-pulse rounded-2xl border border-black/[0.06] bg-white"
+              />
+            ))}
+          </div>
+        )}
+
+        {servicesQuery.isError && (
+          <div className="mt-7 rounded-2xl border border-red-100 bg-red-50 p-8 text-center">
+            <p className="font-semibold text-red-700">
+              Δεν ήταν δυνατή η φόρτωση των
+              υπηρεσιών.
+            </p>
+
+            <button
+              type="button"
+              onClick={() => {
+                void servicesQuery.refetch();
+              }}
+              className="mt-3 text-sm font-semibold text-red-600 underline underline-offset-4"
+            >
+              Προσπάθησε ξανά
+            </button>
+          </div>
+        )}
+
+        {!servicesQuery.isPending &&
+          !servicesQuery.isError &&
+          services.length === 0 && (
+            <div className="mt-7 rounded-2xl border border-dashed border-black/10 bg-white p-10 text-center">
+              <ScissorsIcon className="mx-auto size-7 text-gray-300" />
+
+              <h3 className="mt-4 font-serif text-2xl text-slate-900">
+                Δεν υπάρχουν υπηρεσίες.
+              </h3>
+            </div>
+          )}
+
+        {!servicesQuery.isPending &&
+          !servicesQuery.isError &&
+          services.length > 0 && (
+            <div className="mt-7 grid gap-4 md:grid-cols-2">
+              {services.map((service) => (
+                <AdminServiceCard
+                  key={service.id}
+                  service={service}
+                  isUpdating={
+                    updateServiceMutation.isPending &&
+                    updateServiceMutation.variables
+                      ?.serviceId === service.id
+                  }
+                  onEdit={() => {
+                    updateServiceMutation.reset();
+                    setModal({
+                      mode: "edit",
+                      service,
+                    });
+                  }}
+                  onToggle={() => {
+                    void toggleService(service);
+                  }}
+                />
+              ))}
+            </div>
+          )}
+
+        {updateServiceMutation.error &&
+          !modal && (
+            <div className="mt-6 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
+              {updateServiceMutation.error
+                instanceof ApiError
+                ? updateServiceMutation.error
+                    .message
+                : "Δεν ήταν δυνατή η ενημέρωση της υπηρεσίας."}
+            </div>
+          )}
+      </div>
+
+      {modal && (
+        <AdminServiceModal
+          mode={modal.mode}
+          service={
+            modal.mode === "edit"
+              ? modal.service
+              : null
+          }
+          isPending={
+            modal.mode === "create"
+              ? createServiceMutation.isPending
+              : updateServiceMutation.isPending
+          }
+          error={
+            modal.mode === "create"
+              ? createServiceMutation.error
+              : updateServiceMutation.error
+          }
+          onClose={() => {
+            if (
+              !createServiceMutation.isPending &&
+              !updateServiceMutation.isPending
+            ) {
+              setModal(null);
+              createServiceMutation.reset();
+              updateServiceMutation.reset();
+            }
+          }}
+          onSubmit={async (input) => {
+            if (modal.mode === "create") {
+              await createServiceMutation.mutateAsync(
+                input,
+              );
+            } else {
+              await updateServiceMutation.mutateAsync({
+                serviceId: modal.service.id,
+                data: input,
+              });
+            }
+
+            setModal(null);
+          }}
+        />
+      )}
+    </section>
+  );
+}
+
+function AdminServiceCard({
+  service,
+  isUpdating,
+  onEdit,
+  onToggle,
+}: {
+  service: AdminService;
+  isUpdating: boolean;
+  onEdit: () => void;
+  onToggle: () => void;
+}) {
+  return (
+    <article className="rounded-2xl border border-black/[0.06] bg-white p-5 sm:p-6">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex size-11 items-center justify-center rounded-xl bg-orange-50 text-orange-500">
+          <ScissorsIcon className="size-5" />
+        </div>
+
+        <span
+          className={[
+            "rounded-full border px-3 py-1 text-xs font-semibold",
+            service.active
+              ? "border-emerald-100 bg-emerald-50 text-emerald-700"
+              : "border-gray-200 bg-gray-100 text-gray-500",
+          ].join(" ")}
+        >
+          {service.active
+            ? "Ενεργή"
+            : "Ανενεργή"}
+        </span>
+      </div>
+
+      <h3 className="mt-5 font-serif text-2xl text-slate-900">
+        {service.name}
+      </h3>
+
+      <p className="mt-2 min-h-12 text-sm leading-6 text-gray-500">
+        {service.description ??
+          "Δεν υπάρχει περιγραφή."}
+      </p>
+
+      <div className="mt-5 flex flex-wrap gap-2 text-sm">
+        <span className="rounded-full bg-gray-50 px-3 py-1.5 text-gray-500">
+          30 λεπτά
+        </span>
+
+        <span className="rounded-full bg-gray-50 px-3 py-1.5 font-semibold text-slate-700">
+          {currencyFormatter.format(
+            service.price,
+          )}
+        </span>
+
+        <span className="rounded-full bg-gray-50 px-3 py-1.5 text-gray-500">
+          {service._count.barbers} barbers
+        </span>
+
+        <span className="rounded-full bg-gray-50 px-3 py-1.5 text-gray-500">
+          {service._count.appointments} ραντεβού
+        </span>
+      </div>
+
+      <div className="mt-6 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={onEdit}
+          disabled={isUpdating}
+          className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-50 disabled:opacity-50"
+        >
+          <PencilIcon className="size-4" />
+          Επεξεργασία
+        </button>
+
+        <button
+          type="button"
+          onClick={onToggle}
+          disabled={isUpdating}
+          className={[
+            "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition disabled:opacity-50",
+            service.active
+              ? "border-red-100 bg-red-50 text-red-600 hover:bg-red-100"
+              : "border-emerald-100 bg-emerald-50 text-emerald-700 hover:bg-emerald-100",
+          ].join(" ")}
+        >
+          {isUpdating ? (
+            <LoaderCircleIcon className="size-4 animate-spin" />
+          ) : (
+            <PowerIcon className="size-4" />
+          )}
+
+          {service.active
+            ? "Απενεργοποίηση"
+            : "Ενεργοποίηση"}
+        </button>
+      </div>
+    </article>
+  );
+}
+
+function AdminServiceModal({
+  mode,
+  service,
+  isPending,
+  error,
+  onClose,
+  onSubmit,
+}: {
+  mode: "create" | "edit";
+  service: AdminService | null;
+  isPending: boolean;
+  error: Error | null;
+  onClose: () => void;
+  onSubmit: (
+    input: AdminServiceInput,
+  ) => Promise<void>;
+}) {
+  const [name, setName] = useState(
+    service?.name ?? "",
+  );
+
+  const [description, setDescription] =
+    useState(
+      service?.description ?? "",
+    );
+
+  const [price, setPrice] = useState(
+    service
+      ? String(service.price)
+      : "",
+  );
+
+  const [active, setActive] = useState(
+    service?.active ?? true,
+  );
+
+  const numericPrice = Number(price);
+
+  const formIsInvalid =
+    name.trim().length < 2 ||
+    price.trim() === "" ||
+    !Number.isFinite(numericPrice) ||
+    numericPrice < 0 ||
+    numericPrice > 1000 ||
+    description.length > 500;
+
+  async function submitForm() {
+    if (formIsInvalid) {
+      return;
+    }
+
+    try {
+      await onSubmit({
+        name: name.trim(),
+        description:
+          description.trim() || null,
+        price: numericPrice,
+        active,
+      });
+    } catch {
+      // Το error εμφανίζεται μέσα στο modal.
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-5 py-8 backdrop-blur-sm">
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="max-h-full w-full max-w-lg overflow-y-auto rounded-3xl border border-black/[0.07] bg-white p-7 shadow-[0_30px_100px_rgba(15,23,42,0.25)]"
+      >
+        <div className="flex size-12 items-center justify-center rounded-full bg-orange-50 text-orange-600">
+          <ScissorsIcon className="size-6" />
+        </div>
+
+        <h2 className="mt-6 font-serif text-3xl text-slate-900">
+          {mode === "create"
+            ? "Νέα υπηρεσία"
+            : "Επεξεργασία υπηρεσίας"}
+        </h2>
+
+        <p className="mt-2 text-sm text-gray-500">
+          Η διάρκεια της υπηρεσίας είναι
+          σταθερή στα 30 λεπτά.
+        </p>
+
+        <div className="mt-6 grid gap-5">
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">
+              Όνομα
+            </span>
+
+            <input
+              type="text"
+              value={name}
+              maxLength={100}
+              onChange={(event) =>
+                setName(event.target.value)
+              }
+              className="mt-2 h-12 w-full rounded-xl border border-black/10 px-4 text-sm text-slate-700 outline-none focus:border-orange-300 focus:ring-4 focus:ring-orange-50"
+            />
+          </label>
+
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">
+              Περιγραφή
+            </span>
+
+            <textarea
+              value={description}
+              maxLength={500}
+              onChange={(event) =>
+                setDescription(
+                  event.target.value,
+                )
+              }
+              className="mt-2 min-h-28 w-full resize-y rounded-xl border border-black/10 px-4 py-3 text-sm text-slate-700 outline-none focus:border-orange-300 focus:ring-4 focus:ring-orange-50"
+            />
+
+            <p className="mt-1 text-right text-xs text-gray-400">
+              {description.length}/500
+            </p>
+          </label>
+
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">
+              Τιμή
+            </span>
+
+            <div className="mt-2 flex items-center rounded-xl border border-black/10 px-4 focus-within:border-orange-300 focus-within:ring-4 focus-within:ring-orange-50">
+              <EuroIcon className="size-4 text-orange-500" />
+
+              <input
+                type="number"
+                min="0"
+                max="1000"
+                step="0.01"
+                value={price}
+                onChange={(event) =>
+                  setPrice(
+                    event.target.value,
+                  )
+                }
+                className="h-12 flex-1 bg-transparent px-3 text-sm text-slate-700 outline-none"
+              />
+            </div>
+          </label>
+
+          <div className="flex items-center justify-between rounded-xl border border-black/[0.06] bg-gray-50 p-4">
+            <div>
+              <p className="text-sm font-semibold text-slate-800">
+                Ενεργή υπηρεσία
+              </p>
+
+              <p className="mt-1 text-xs text-gray-400">
+                Εμφανίζεται στο booking flow.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              role="switch"
+              aria-checked={active}
+              onClick={() =>
+                setActive((value) => !value)
+              }
+              className={[
+                "relative h-7 w-12 rounded-full transition",
+                active
+                  ? "bg-orange-500"
+                  : "bg-gray-200",
+              ].join(" ")}
+            >
+              <span
+                className={[
+                  "absolute top-1 size-5 rounded-full bg-white shadow-sm transition",
+                  active
+                    ? "left-6"
+                    : "left-1",
+                ].join(" ")}
+              />
+            </button>
+          </div>
+        </div>
+
+        {error && (
+          <div className="mt-5 rounded-xl border border-red-100 bg-red-50 p-4 text-sm text-red-600">
+            {error instanceof ApiError
+              ? error.message
+              : "Δεν ήταν δυνατή η αποθήκευση της υπηρεσίας."}
+          </div>
+        )}
+
+        <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            disabled={isPending}
+            onClick={onClose}
+            className="rounded-full border border-black/10 bg-white px-5 py-2.5 text-sm font-semibold text-gray-600 transition hover:bg-gray-50 disabled:opacity-50"
+          >
+            Επιστροφή
+          </button>
+
+          <button
+            type="button"
+            disabled={
+              isPending || formIsInvalid
+            }
+            onClick={() => {
+              void submitForm();
+            }}
+            className="inline-flex items-center justify-center gap-2 rounded-full bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isPending && (
+              <LoaderCircleIcon className="size-4 animate-spin" />
+            )}
+
+            {mode === "create"
+              ? "Δημιουργία"
+              : "Αποθήκευση"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

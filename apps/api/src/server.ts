@@ -11,6 +11,7 @@ import { authRouter } from "./routes/auth.routes.js";
 import { staffRouter } from "./routes/staff.routes.js";
 import { adminRouter, } from "./routes/admin.routes.js";
 import { env } from "./config/env.js";
+import { adminBarbersRouter, } from "./routes/admin-barbers.routes.js";
 
 const app = express();
 
@@ -38,6 +39,8 @@ app.use("/api/barbers", barbersRouter);
 app.use("/api/appointments", appointmentsRouter);
 app.use("/api/staff", staffRouter);
 app.use("/api/admin", adminRouter);
+app.use("/api/admin", adminBarbersRouter);
+
 
 app.get("/api/health", async (_req, res) => {
   try {

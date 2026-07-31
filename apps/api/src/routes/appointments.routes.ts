@@ -293,6 +293,12 @@ appointmentsRouter.post(
   "/",
   requireAuth,
   async (req, res) => {
+
+    if (req.user!.role !== "CUSTOMER") {
+      res.status(403).json({
+        message: "Forbidden",
+      });
+    }
   const parsedBody = createAppointmentSchema.safeParse(req.body);
 
   if (!parsedBody.success) {

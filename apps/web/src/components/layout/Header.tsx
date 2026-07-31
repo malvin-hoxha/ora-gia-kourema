@@ -22,11 +22,7 @@ export function Header() {
     logout,
   } = useAuth();
 
-  const accountPath =
-  user?.role === "BARBER" ||
-  user?.role === "ADMIN"
-    ? "/staff"
-    : "/dashboard";
+  const accountPath =  user?.role === "ADMIN" ? "/admin" :  user?.role === "BARBER" ? "/staff" : "/dashboard";
 
   
   return (
@@ -99,12 +95,16 @@ export function Header() {
               
             </>
           )}
-          <Link
-            to="/booking"
-            className="rounded-full bg-orange-500 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-orange-600 hover:shadow-md hover:shadow-orange-200"
-          >
-            Κλείσε ραντεβού
-          </Link>
+
+          {user && (user.role !== "ADMIN" && user.role !== "BARBER") && (
+            <Link
+              to="/booking"
+              className="rounded-full bg-orange-500 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-orange-600 hover:shadow-md hover:shadow-orange-200"
+            >
+              Κλείσε ραντεβού
+            </Link>
+          )}
+          
         </div>
       </div>
     </header>
