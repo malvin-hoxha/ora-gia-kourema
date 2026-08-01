@@ -9,6 +9,8 @@ updateAppointmentStatusParamsSchema, updateWorkingHoursSchema, previewTimeOffSch
 from "../schemas/staff.schema.js";
 import { TIME_OFF_CANCELLATION_REASON, TIME_OFF_WINDOW_DAYS,} from "../constants/time-off.constants.js";
 
+import { safelySendEmail, sendBookingCancelledEmail, sendBookingConfirmedEmail,} from "../services/email/email.service.js";
+
 export const staffRouter = Router();
 
 const appointmentSelect = {
@@ -72,11 +74,19 @@ const timeOffConflictAppointmentSelect = {
     },
   },
 
+  barber: {
+    select: {
+      id: true,
+      name: true,
+    },
+  },
+
   service: {
     select: {
       id: true,
       name: true,
       durationMinutes: true,
+      price: true,
     },
   },
 } satisfies Prisma.AppointmentSelect;
@@ -130,9 +140,7 @@ type TimeOffResult =
     select: typeof timeOffSelect;
   }>;
 
-function formatTimeOff(
-  timeOff: TimeOffResult,
-) {
+function formatTimeOff( timeOff: TimeOffResult,) {
   const timeZone =
     process.env.BARBERSHOP_TIME_ZONE ??
     "Europe/Athens";
@@ -185,9 +193,7 @@ type TimeOffInput = {
   reason?: string | null;
 };
 
-function createTimeOffRange(
-  input: TimeOffInput,
-) {
+function createTimeOffRange( input: TimeOffInput,) {
   const timeZone =
     process.env.BARBERSHOP_TIME_ZONE ??
     "Europe/Athens";
@@ -254,11 +260,7 @@ function createTimeOffRange(
   };
 }
 
-function validateTimeOffRange(
-  startsAt: DateTime,
-  endsAt: DateTime,
-  allDay: boolean,
-) {
+function validateTimeOffRange( startsAt: DateTime, endsAt: DateTime, allDay: boolean,) {
   const timeZone =
     process.env.BARBERSHOP_TIME_ZONE ??
     "Europe/Athens";
@@ -556,11 +558,7 @@ staffRouter.put("/working-hours", requireAuth, requireRole("BARBER"), async (req
   },
 );
 
-staffRouter.post(
-  "/time-off/preview",
-  requireAuth,
-  requireRole("BARBER"),
-  async (req, res) => {
+staffRouter.post( "/time-off/preview", requireAuth, requireRole("BARBER"), async (req, res) => {
     const parsedBody =
       previewTimeOffSchema.safeParse(
         req.body,
@@ -802,15 +800,8 @@ staffRouter.post(
   },
 );
 
-staffRouter.post(
-  "/time-off",
-  requireAuth,
-  requireRole("BARBER"),
-  async (req, res) => {
-    const parsedBody =
-      previewTimeOffSchema.safeParse(
-        req.body,
-      );
+staffRouter.post( "/time-off", requireAuth, requireRole("BARBER"), async (req, res) => {
+    const parsedBody = previewTimeOffSchema.safeParse( req.body, );
 
     if (!parsedBody.success) {
       res.status(400).json({
@@ -881,9 +872,7 @@ staffRouter.post(
         .toUTC()
         .toJSDate();
 
-      const result =
-        await prisma.$transaction(
-          async (transaction) => {
+      const result = await prisma.$transaction( async (transaction) => {
             /*
              * Ξαναελέγχουμε μέσα στην transaction
              * αν υπάρχει overlapping time off.
@@ -1016,7 +1005,65 @@ staffRouter.post(
               Prisma.TransactionIsolationLevel
                 .Serializable,
           },
+      );
+
+      const emailResults = await Promise.allSettled(
+          result.conflictingAppointments.map(
+            (appointment) =>
+              sendBookingCancelledEmail({
+                customerName:
+                  appointment.customer.name,
+
+                customerEmail:
+                  appointment.customer.email,
+
+                barberName:
+                  appointment.barber.name,
+
+                serviceName:
+                  appointment.service.name,
+
+                startsAt:
+                  appointment.startsAt,
+
+                price:
+                  Number(
+                    appointment.service.price,
+                  ),
+
+                cancellationReason:
+                  TIME_OFF_CANCELLATION_REASON,
+              }),
+          ),
         );
+
+      emailResults.forEach(
+        (emailResult, index) => {
+          if (
+            emailResult.status ===
+            "rejected"
+          ) {
+            const appointment =
+              result.conflictingAppointments[
+                index
+              ];
+
+            console.error(
+              "Time-off cancellation email failed:",
+              {
+                appointmentId:
+                  appointment?.id,
+
+                customerEmail:
+                  appointment?.customer.email,
+
+                error:
+                  emailResult.reason,
+              },
+            );
+          }
+        },
+      );
 
       res.status(201).json({
         message:
@@ -1091,11 +1138,7 @@ staffRouter.post(
   },
 );
 
-staffRouter.get(
-  "/time-off",
-  requireAuth,
-  requireRole("BARBER"),
-  async (req, res) => {
+staffRouter.get( "/time-off", requireAuth, requireRole("BARBER"), async (req, res) => {
     try {
       const barberId =
         await getAuthenticatedBarberId(
@@ -1152,11 +1195,7 @@ staffRouter.get(
   },
 );
 
-staffRouter.delete(
-  "/time-off/:timeOffId",
-  requireAuth,
-  requireRole("BARBER"),
-  async (req, res) => {
+staffRouter.delete( "/time-off/:timeOffId", requireAuth, requireRole("BARBER"), async (req, res) => {
     const parsedParams =
       timeOffParamsSchema.safeParse(
         req.params,
@@ -1454,6 +1493,26 @@ staffRouter.patch("/appointments/:appointmentId/status", requireAuth, requireRol
             status: true,
             startsAt: true,
             endsAt: true,
+
+            customer: {
+              select: {
+                name: true,
+                email: true,
+              },
+            },
+
+            barber: {
+              select: {
+                name: true,
+              },
+            },
+
+            service: {
+              select: {
+                name: true,
+                price: true,
+              },
+            },
           },
         });
 
@@ -1522,6 +1581,61 @@ staffRouter.patch("/appointments/:appointmentId/status", requireAuth, requireRol
 
           select: appointmentSelect,
         });
+
+        if (requestedStatus === "CONFIRMED") {
+          await safelySendEmail(() =>
+            sendBookingConfirmedEmail({
+              customerName:
+                appointment.customer.name,
+
+              customerEmail:
+                appointment.customer.email,
+
+              barberName:
+                appointment.barber.name,
+
+              serviceName:
+                appointment.service.name,
+
+              startsAt:
+                appointment.startsAt,
+
+              price:
+                Number(
+                  appointment.service.price,
+                ),
+            }),
+          );
+        }
+
+        if (requestedStatus === "CANCELLED") {
+          await safelySendEmail(() =>
+            sendBookingCancelledEmail({
+              customerName:
+                appointment.customer.name,
+
+              customerEmail:
+                appointment.customer.email,
+
+              barberName:
+                appointment.barber.name,
+
+              serviceName:
+                appointment.service.name,
+
+              startsAt:
+                appointment.startsAt,
+
+              price:
+                Number(
+                  appointment.service.price,
+                ),
+
+              cancellationReason:
+                updatedAppointment.cancellationReason,
+            }),
+          );
+        }
 
       res.status(200).json({
         message:

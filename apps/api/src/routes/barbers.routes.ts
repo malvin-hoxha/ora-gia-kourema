@@ -67,9 +67,7 @@ barbersRouter.get("/", async (_req, res) => {
   }
 });
 
-barbersRouter.get(
-  "/:barberId/available-slots",
-  async (req, res) => {
+barbersRouter.get("/:barberId/available-slots", async (req, res) => {
     try {
       const { barberId } = req.params;
 

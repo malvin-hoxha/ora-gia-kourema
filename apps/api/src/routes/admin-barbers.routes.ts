@@ -112,10 +112,7 @@ async function validateServiceIds(serviceIds: string[]) {
   return uniqueServiceIds;
 }
 
-async function validateBarberUser(
-  userId: string | null | undefined,
-  currentBarberId?: string,
-) {
+async function validateBarberUser( userId: string | null | undefined, currentBarberId?: string,) {
   if (userId === undefined || userId === null) {
     return true;
   }
@@ -149,9 +146,7 @@ async function validateBarberUser(
   return Boolean(user);
 }
 
-adminBarbersRouter.get(
-  "/barber-users",
-  async (_req, res) => {
+adminBarbersRouter.get( "/barber-users", async (_req, res) => {
     try {
       const users = await prisma.user.findMany({
         where: {
@@ -189,9 +184,7 @@ adminBarbersRouter.get(
   },
 );
 
-adminBarbersRouter.get(
-  "/barbers",
-  async (_req, res) => {
+adminBarbersRouter.get( "/barbers", async (_req, res) => {
     try {
       const barbers = await prisma.barber.findMany({
         orderBy: [
@@ -221,9 +214,7 @@ adminBarbersRouter.get(
   },
 );
 
-adminBarbersRouter.post(
-  "/barbers",
-  async (req, res) => {
+adminBarbersRouter.post( "/barbers", async (req, res) => {
     const parsedBody = createAdminBarberSchema.safeParse(req.body);
 
     if (!parsedBody.success) {
@@ -310,9 +301,7 @@ adminBarbersRouter.post(
   },
 );
 
-adminBarbersRouter.patch(
-  "/barbers/:barberId",
-  async (req, res) => {
+adminBarbersRouter.patch( "/barbers/:barberId", async (req, res) => {
     const parsedParams = adminBarberParamsSchema.safeParse(req.params);
     const parsedBody = updateAdminBarberSchema.safeParse(req.body);
 
@@ -495,9 +484,7 @@ adminBarbersRouter.patch(
   },
 );
 
-adminBarbersRouter.get(
-  "/barbers/:barberId/working-hours",
-  async (req, res) => {
+adminBarbersRouter.get( "/barbers/:barberId/working-hours", async (req, res) => {
     const parsedParams =
       adminBarberParamsSchema.safeParse(
         req.params,
@@ -571,9 +558,7 @@ adminBarbersRouter.get(
   },
 );
 
-adminBarbersRouter.put(
-  "/barbers/:barberId/working-hours",
-  async (req, res) => {
+adminBarbersRouter.put("/barbers/:barberId/working-hours", async (req, res) => {
     const parsedParams =
       adminBarberParamsSchema.safeParse(
         req.params,
@@ -721,9 +706,7 @@ adminBarbersRouter.put(
   },
 );
 
-adminBarbersRouter.delete(
-  "/barbers/:barberId/time-off/:timeOffId",
-  async (req, res) => {
+adminBarbersRouter.delete("/barbers/:barberId/time-off/:timeOffId", async (req, res) => {
     const parsedParams =
       adminBarberTimeOffParamsSchema.safeParse(
         req.params,

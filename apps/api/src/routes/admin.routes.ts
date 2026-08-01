@@ -7,6 +7,8 @@ import { adminAppointmentsQuerySchema, adminAppointmentParamsSchema,
 adminServiceParamsSchema, createAdminServiceSchema, updateAdminServiceSchema,
 updateAdminAppointmentStatusSchema, adminBarberParamsSchema  } from "../schemas/admin.schema.js";
 
+import { safelySendEmail, sendBookingCancelledEmail, sendBookingConfirmedEmail,} from "../services/email/email.service.js";
+
 export const adminRouter = Router();
 const SERVICE_DURATION_MINUTES = 30;
 const adminAppointmentSelect = {
@@ -48,15 +50,11 @@ const adminAppointmentSelect = {
   },
 } satisfies Prisma.AppointmentSelect;
 
-type AdminAppointment =
-  Prisma.AppointmentGetPayload<{
+type AdminAppointment = Prisma.AppointmentGetPayload<{
     select: typeof adminAppointmentSelect;
   }>;
 
-function formatAdminAppointment(
-  appointment: AdminAppointment,
-  timeZone: string,
-) {
+function formatAdminAppointment( appointment: AdminAppointment, timeZone: string,) {
   return {
     ...appointment,
 
@@ -108,14 +106,9 @@ function formatAdminAppointment(
   };
 }
 
-adminRouter.use(
-  requireAuth,
-  requireRole("ADMIN"),
-);
+adminRouter.use( requireAuth, requireRole("ADMIN"),);
 
-adminRouter.get(
-  "/overview",
-  async (_req, res) => {
+adminRouter.get( "/overview", async (_req, res) => {
     try {
       const timeZone =
         process.env.BARBERSHOP_TIME_ZONE ??
@@ -256,9 +249,7 @@ adminRouter.get(
   },
 );
 
-adminRouter.get(
-  "/appointments",
-  async (req, res) => {
+adminRouter.get( "/appointments", async (req, res) => {
     const parsedQuery =
       adminAppointmentsQuerySchema.safeParse(
         req.query,
@@ -385,16 +376,9 @@ adminRouter.get(
   },
 );
 
-type AdminStatusUpdate =
-  | "CONFIRMED"
-  | "COMPLETED"
-  | "CANCELLED"
-  | "NO_SHOW";
+type AdminStatusUpdate = | "CONFIRMED" | "COMPLETED" | "CANCELLED" | "NO_SHOW";
 
-const allowedAdminTransitions: Record<
-  string,
-  AdminStatusUpdate[]
-> = {
+const allowedAdminTransitions: Record< string, AdminStatusUpdate[]> = {
   PENDING: [
     "CONFIRMED",
     "CANCELLED",
@@ -412,9 +396,7 @@ const allowedAdminTransitions: Record<
 };
 
 
-adminRouter.patch(
-  "/appointments/:appointmentId/status",
-  async (req, res) => {
+adminRouter.patch( "/appointments/:appointmentId/status", async (req, res) => {
     const parsedParams =
       adminAppointmentParamsSchema.safeParse(
         req.params,
@@ -496,16 +478,12 @@ adminRouter.patch(
         return;
       }
 
-      const isCancellation =
-        requestedStatus ===
-        "CANCELLED";
+      const isCancellation = requestedStatus === "CANCELLED";
 
-      const timeZone =
-        process.env.BARBERSHOP_TIME_ZONE ??
+      const timeZone = process.env.BARBERSHOP_TIME_ZONE ??
         "Europe/Athens";
 
-      const updatedAppointment =
-        await prisma.appointment.update({
+      const updatedAppointment = await prisma.appointment.update({
           where: {
             id: appointment.id,
           },
@@ -531,7 +509,62 @@ adminRouter.patch(
 
           select:
             adminAppointmentSelect,
-        });
+      });
+
+      if (requestedStatus === "CONFIRMED") {
+        await safelySendEmail(() =>
+          sendBookingConfirmedEmail({
+            customerName:
+              updatedAppointment.customer.name,
+
+            customerEmail:
+              updatedAppointment.customer.email,
+
+            barberName:
+              updatedAppointment.barber.name,
+
+            serviceName:
+              updatedAppointment.service.name,
+
+            startsAt:
+              updatedAppointment.startsAt,
+
+            price:
+              Number(
+                updatedAppointment.service.price,
+              ),
+          }),
+        );
+      }
+
+      if (requestedStatus === "CANCELLED") {
+        await safelySendEmail(() =>
+          sendBookingCancelledEmail({
+            customerName:
+              updatedAppointment.customer.name,
+
+            customerEmail:
+              updatedAppointment.customer.email,
+
+            barberName:
+              updatedAppointment.barber.name,
+
+            serviceName:
+              updatedAppointment.service.name,
+
+            startsAt:
+              updatedAppointment.startsAt,
+
+            price:
+              Number(
+                updatedAppointment.service.price,
+              ),
+
+            cancellationReason:
+              updatedAppointment.cancellationReason,
+          }),
+        );
+      }
 
       res.status(200).json({
         message:
@@ -578,23 +611,18 @@ const adminServiceSelect = {
   },
 } satisfies Prisma.ServiceSelect;
 
-type AdminService =
-  Prisma.ServiceGetPayload<{
+type AdminService = Prisma.ServiceGetPayload<{
     select: typeof adminServiceSelect;
   }>;
 
-function formatAdminService(
-  service: AdminService,
-) {
+function formatAdminService( service: AdminService, ) {
   return {
     ...service,
     price: Number(service.price),
   };
 }
 
-adminRouter.get(
-  "/services",
-  async (_req, res) => {
+adminRouter.get( "/services", async (_req, res) => {
     try {
       const services =
         await prisma.service.findMany({
@@ -635,9 +663,7 @@ adminRouter.get(
   },
 );
 
-adminRouter.post(
-  "/services",
-  async (req, res) => {
+adminRouter.post( "/services", async (req, res) => {
     const parsedBody =
       createAdminServiceSchema.safeParse(
         req.body,
@@ -734,9 +760,7 @@ adminRouter.post(
   },
 );
 
-adminRouter.patch(
-  "/services/:serviceId",
-  async (req, res) => {
+adminRouter.patch( "/services/:serviceId", async (req, res) => {
     const parsedParams =
       adminServiceParamsSchema.safeParse(
         req.params,
@@ -961,15 +985,12 @@ const adminBarberDetailsSelect = {
   },
 } satisfies Prisma.BarberSelect;
 
-type AdminBarberDetails =
-  Prisma.BarberGetPayload<{
+type AdminBarberDetails = Prisma.BarberGetPayload<{
     select:
       typeof adminBarberDetailsSelect;
   }>;
 
-function formatAdminBarberDetails(
-  barber: AdminBarberDetails,
-) {
+function formatAdminBarberDetails( barber: AdminBarberDetails, ) {
   return {
     ...barber,
 
@@ -985,9 +1006,7 @@ function formatAdminBarberDetails(
   };
 }
 
-adminRouter.get(
-  "/barbers/:barberId/details",
-  async (req, res) => {
+adminRouter.get( "/barbers/:barberId/details", async (req, res) => {
     const parsedParams =
       adminBarberParamsSchema.safeParse(
         req.params,

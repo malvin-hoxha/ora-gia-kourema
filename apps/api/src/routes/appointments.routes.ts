@@ -6,6 +6,7 @@ import { prisma } from "../lib/prisma.js";
 import { cancelAppointmentParamsSchema, createAppointmentSchema,} from "../schemas/appointment.schema.js";
 import { createZonedDateTime, isAlignedToSlotInterval, SLOT_INTERVAL_MINUTES,} from "../utils/availability.js";
 import { BOOKING_WINDOW_DAYS } from "../constants/auth.constants.js";
+import { safelySendEmail, sendBookingCreatedEmail, sendBookingCancelledEmail,} from "../services/email/email.service.js";
 
 import { requireAuth } from "../middleware/auth.middleware.js";
 
@@ -48,9 +49,7 @@ type AppointmentResult = Prisma.AppointmentGetPayload<{
   select: typeof appointmentSelect;
 }>;
 
-function formatAppointment(
-  appointment: AppointmentResult,
-) {
+function formatAppointment( appointment: AppointmentResult, ) {
   const timeZone =
     process.env.BARBERSHOP_TIME_ZONE ?? "Europe/Athens";
 
@@ -86,10 +85,7 @@ function formatAppointment(
   };
 }
 
-appointmentsRouter.get(
-  "/me",
-  requireAuth,
-  async (req, res) => {
+appointmentsRouter.get("/me", requireAuth, async (req, res) => {
     try {
       const appointments =
         await prisma.appointment.findMany({
@@ -157,14 +153,8 @@ appointmentsRouter.get(
   },
 );
 
-appointmentsRouter.patch(
-  "/:appointmentId/cancel",
-  requireAuth,
-  async (req, res) => {
-    const parsedParams =
-      cancelAppointmentParamsSchema.safeParse(
-        req.params,
-      );
+appointmentsRouter.patch("/:appointmentId/cancel", requireAuth, async (req, res) => {
+    const parsedParams = cancelAppointmentParamsSchema.safeParse( req.params, );
 
     if (!parsedParams.success) {
       res.status(400).json({
@@ -176,8 +166,7 @@ appointmentsRouter.patch(
       return;
     }
 
-    const { appointmentId } =
-      parsedParams.data;
+    const { appointmentId } = parsedParams.data;
 
     try {
       const existingAppointment =
@@ -190,7 +179,39 @@ appointmentsRouter.patch(
           select: {
             id: true,
             startsAt: true,
+            endsAt: true,
             status: true,
+            notes: true,
+            createdAt: true,
+
+            cancelledAt: true,
+            cancelledBy: true,
+            cancellationReason: true,
+
+            customer: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+
+            barber: {
+              select: {
+                id: true,
+                name: true,
+                imageUrl: true,
+              },
+            },
+
+            service: {
+              select: {
+                id: true,
+                name: true,
+                durationMinutes: true,
+                price: true,
+              },
+            },
           },
         });
 
@@ -251,8 +272,7 @@ appointmentsRouter.patch(
         return;
       }
 
-      const cancelledAppointment =
-        await prisma.appointment.update({
+      const cancelledAppointment = await prisma.appointment.update({
           where: {
             id: existingAppointment.id,
           },
@@ -265,7 +285,35 @@ appointmentsRouter.patch(
           },
 
           select: appointmentSelect,
-        });
+      });
+
+      
+      await safelySendEmail(() =>
+        sendBookingCancelledEmail({
+          customerName:
+            existingAppointment.customer.name,
+
+          customerEmail:
+            existingAppointment.customer.email,
+
+          barberName:
+            cancelledAppointment.barber.name,
+
+          serviceName:
+            cancelledAppointment.service.name,
+
+          startsAt:
+            cancelledAppointment.startsAt,
+
+          price:
+            Number(
+              cancelledAppointment.service.price,
+            ),
+
+          cancellationReason:
+            cancelledAppointment.cancellationReason,
+        }),
+      );
 
       res.status(200).json({
         message:
@@ -289,16 +337,13 @@ appointmentsRouter.patch(
   },
 );
 
-appointmentsRouter.post(
-  "/",
-  requireAuth,
-  async (req, res) => {
+appointmentsRouter.post("/", requireAuth, async (req, res) => {
+  if (req.user!.role !== "CUSTOMER") {
+    res.status(403).json({
+      message: "Forbidden",
+    });
+  }
 
-    if (req.user!.role !== "CUSTOMER") {
-      res.status(403).json({
-        message: "Forbidden",
-      });
-    }
   const parsedBody = createAppointmentSchema.safeParse(req.body);
 
   if (!parsedBody.success) {
@@ -326,10 +371,32 @@ appointmentsRouter.post(
       notes,
     });
 
+    await safelySendEmail(() => sendBookingCreatedEmail({
+      customerName:
+        appointment.customer.name,
+
+      customerEmail:
+        appointment.customer.email,
+
+      barberName:
+        appointment.barber.name,
+
+      serviceName:
+        appointment.service.name,
+
+      startsAt:
+        appointment.startsAt,
+
+      price:
+        appointment.service.price,
+      }),
+    );
+
     res.status(201).json({
       message: "Appointment created successfully",
       data: appointment,
     });
+
   } catch (error) {
     if (error instanceof AppointmentConflictError) {
       res.status(409).json({
@@ -363,9 +430,7 @@ type CreateAppointmentTransactionInput = {
   notes?: string;
 };
 
-async function createAppointmentWithRetry(
-  input: CreateAppointmentTransactionInput,
-) {
+async function createAppointmentWithRetry( input: CreateAppointmentTransactionInput, ) {
   for (
     let attempt = 1;
     attempt <= MAX_TRANSACTION_RETRIES;
@@ -408,12 +473,8 @@ async function createAppointmentWithRetry(
   throw new AppointmentConflictError();
 }
 
-async function createAppointmentTransaction(
-  tx: Prisma.TransactionClient,
-  input: CreateAppointmentTransactionInput,
-) {
-  const timeZone =
-    process.env.BARBERSHOP_TIME_ZONE ?? "Europe/Athens";
+async function createAppointmentTransaction( tx: Prisma.TransactionClient, input: CreateAppointmentTransactionInput, ) {
+  const timeZone = process.env.BARBERSHOP_TIME_ZONE ?? "Europe/Athens";
 
   const requestedStart = DateTime.fromISO(input.startsAt, {
     setZone: true,
