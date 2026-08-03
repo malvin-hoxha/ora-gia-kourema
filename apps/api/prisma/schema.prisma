@@ -13,6 +13,10 @@ enum UserRole {
   ADMIN
 }
 
+enum AuthProvider {
+  GOOGLE
+}
+
 enum AppointmentStatus {
   PENDING
   CONFIRMED
@@ -38,12 +42,30 @@ model User {
 
   sessions     Session[]
   appointments Appointment[]
+  authAccounts AuthAccount[] //Google / Github / Apple account
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   barber    Barber?
 
   @@map("users")
+}
+
+model AuthAccount {
+  id                String       @id @default(cuid())
+  userId            String
+  provider          AuthProvider
+  providerAccountId String //google sub
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([provider, providerAccountId])
+  @@unique([userId, provider])
+  @@index([userId])
+  @@map("auth_accounts")
 }
 
 model Session {

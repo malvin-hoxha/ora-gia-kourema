@@ -49,3 +49,53 @@ export const loginSchema = z.object({
     .string()
     .min(1, "Password is required"),
 });
+
+export const googleLoginSchema =
+  z
+    .object({
+      credential: z
+        .string()
+        .trim()
+        .min(
+          1,
+          "Google credential is required",
+        )
+        .max(
+          10_000,
+          "Google credential is too large",
+        ),
+    })
+    .strict();
+
+export const googleAccountLinkSchema =
+  z
+    .object({
+      credential: z
+        .string()
+        .trim()
+        .min(
+          1,
+          "Google credential is required",
+        )
+        .max(
+          10_000,
+          "Google credential is too large",
+        ),
+
+      /*
+       * Δεν κάνουμε trim το password.
+       * Τα κενά μπορεί θεωρητικά να αποτελούν
+       * μέρος του πραγματικού password.
+       */
+      password: z
+        .string()
+        .min(
+          1,
+          "Password is required",
+        )
+        .max(
+          128,
+          "Password is too long",
+        ),
+    })
+    .strict();

@@ -12,6 +12,11 @@ const envSchema = z.object({
     .url()
     .default("http://localhost:5173"),
 
+  GOOGLE_CLIENT_ID: z
+    .string()
+    .trim()
+    .min(1,"GOOGLE_CLIENT_ID is required",),
+
   DATABASE_URL: z.string().min(1),
 
   BARBERSHOP_TIME_ZONE: z

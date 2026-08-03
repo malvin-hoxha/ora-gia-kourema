@@ -1,6 +1,7 @@
 import { useCallback,  useEffect,  useMemo,  useState,  type ReactNode} from "react";
 
-import { getCurrentUser, LoginUser as loginUser, logoutUser, registerUser, type AuthUser, type LoginInput, type RegisterInput } 
+import { getCurrentUser, LoginUser as loginUser, logoutUser, registerUser, type AuthUser, type LoginInput, googleLoginUser,
+type RegisterInput,  linkGoogleAccount as linkGoogleAccountRequest, type GoogleAccountLinkInput, type GoogleLoginInput,} 
 from "../api/auth.api";
 import { ApiError } from "../api/api-client";
 import { AuthContext, type AuthContextValue } from "./AuthContext";
@@ -83,6 +84,26 @@ export function AuthProvider({children}: AuthProviderProps) {
         [],
     );
 
+    const googleLogin = useCallback( async (input: GoogleLoginInput) => {
+        const response = await googleLoginUser(input);
+
+        const authenticatedUser = response.data.user;
+
+        setUser(authenticatedUser);
+
+        return authenticatedUser;
+    },[],);
+
+    const linkGoogleAccount = useCallback( async (input: GoogleAccountLinkInput,) => {
+        const response = await linkGoogleAccountRequest( input, );
+
+        const authenticatedUser = response.data.user;
+
+        setUser(authenticatedUser);
+
+        return authenticatedUser;
+    },[],);
+
     const register = useCallback(async (input: RegisterInput) => {
         const response = await registerUser(input);
         setUser(response.data.user);
@@ -107,6 +128,8 @@ export function AuthProvider({children}: AuthProviderProps) {
             register,
             logout,
             refresh: refreshUser,
+            googleLogin,
+            linkGoogleAccount,
             }),
         [
             user,
@@ -115,6 +138,8 @@ export function AuthProvider({children}: AuthProviderProps) {
             register,
             logout,
             refreshUser,
+            googleLogin,
+            linkGoogleAccount,
         ],
     );
 

@@ -21,6 +21,15 @@ export type LoginInput = {
   password: string;
 };
 
+export type GoogleLoginInput = {
+  credential: string;
+};
+
+export type GoogleAccountLinkInput = {
+  credential: string;
+  password: string;
+};
+
 type AuthResponse = {
   message: string;
   data: {
@@ -33,7 +42,6 @@ type CurrentUserResponse = {
     user: AuthUser;
   };
 };
-
 
 export async function registerUser(
     input: RegisterInput,
@@ -54,6 +62,24 @@ export async function LoginUser(
         retryOnUnauthorized: false,
     });
 };
+
+export async function googleLoginUser( input: GoogleLoginInput,) {
+  return apiRequest<AuthResponse>( "/auth/google", {
+      method: "POST",
+      body: JSON.stringify(input),
+      retryOnUnauthorized: false,
+    },
+  );
+}
+
+export async function linkGoogleAccount( input: GoogleAccountLinkInput,) {
+  return apiRequest<AuthResponse>("/auth/google/link",{
+      method: "POST",
+      body: JSON.stringify(input),
+      retryOnUnauthorized: false,
+    },
+  );
+}
 
 export async function getCurrentUser() {
   return apiRequest<CurrentUserResponse>("/auth/me");

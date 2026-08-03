@@ -34,7 +34,6 @@ app.use(cookieParser());
 
 app.use("/api/auth", authRouter);
 app.use("/api/services", servicesRouter);
-app.use("/api/services", servicesRouter);
 app.use("/api/barbers", barbersRouter);
 app.use("/api/appointments", appointmentsRouter);
 app.use("/api/staff", staffRouter);
