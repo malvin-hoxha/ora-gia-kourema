@@ -1,6 +1,6 @@
 import "dotenv/config";
 import cookieParser from "cookie-parser";
-import cors from "cors";
+import cors, { type CorsOptions, } from "cors";
 import express from "express";
 import helmet from "helmet";
 import { prisma } from "./lib/prisma.js";
@@ -16,19 +16,59 @@ import { stripeWebhookRouter, } from "./routes/stripe-webhook.routes.js";
 
 const app = express();
 
-app.set("trust proxy", 1);
+app.set(
+  "trust proxy",
+  env.TRUST_PROXY,
+);
 
 const PORT = env.PORT;
-const CLIENT_URL = env.CLIENT_URL;
+
+const allowedOrigins = new Set(
+  env.CORS_ALLOWED_ORIGINS,
+);
+
+const corsOptions: CorsOptions = {
+  origin(origin, callback) {
+    /*
+     * Requests without an Origin header include
+     * server-to-server requests, Stripe webhooks,
+     * curl and local tooling.
+     */
+    if (!origin || allowedOrigins.has(origin)) {
+      callback(null, true);
+      return;
+    }
+
+    /*
+     * Do not throw a generic server error.
+     * Simply omit CORS permission for an
+     * unapproved browser origin.
+     */
+    callback(null, false);
+  },
+
+  credentials: true,
+
+  methods: [
+    "GET",
+    "HEAD",
+    "POST",
+    "PUT",
+    "PATCH",
+    "DELETE",
+  ],
+
+  allowedHeaders: [
+    "Content-Type",
+  ],
+
+  optionsSuccessStatus: 204,
+  maxAge: 600,
+};
 
 app.use(helmet());
 
-app.use(
-  cors({
-    origin: CLIENT_URL,
-    credentials: true,
-  }),
-);
+app.use(cors(corsOptions));
 
 /*
  * Stripe webhook must receive the untouched

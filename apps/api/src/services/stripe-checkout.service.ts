@@ -57,9 +57,8 @@ export async function createAppointmentCheckoutSession(input: CreateAppointmentC
 
         payment_method_types: ["card"],
 
-        success_url: `${env.CLIENT_URL}` + "/booking/payment-success" + "?session_id={CHECKOUT_SESSION_ID}",
-
-        cancel_url: `${env.CLIENT_URL}` + "/booking/payment-cancelled" + `?appointmentId=${encodeURIComponent(input.appointmentId,)}`,
+        success_url: `${env.FRONTEND_URL}` + "/booking/payment-success" + "?session_id={CHECKOUT_SESSION_ID}",
+        cancel_url: `${env.FRONTEND_URL}` + "/booking/payment-cancelled" + `?appointmentId=${encodeURIComponent(input.appointmentId,)}`,
 
         customer_email: input.customerEmail,
 

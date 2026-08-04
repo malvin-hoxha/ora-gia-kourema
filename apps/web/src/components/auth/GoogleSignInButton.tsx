@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, } from "react";
+import { webEnv, } from "../../config/env";
 
 type GoogleCredentialResponse = {
   credential?: string;
@@ -48,8 +49,7 @@ type GoogleSignInButtonProps = {
   ) => void | Promise<void>;
 };
 
-const googleClientId =
-  import.meta.env.VITE_GOOGLE_CLIENT_ID;
+const googleClientId = webEnv.GOOGLE_CLIENT_ID;
 
 let googleInitialized = false;
 
@@ -70,14 +70,6 @@ export function GoogleSignInButton({ disabled = false, onCredential,}: GoogleSig
 
         function renderGoogleButton() {
             if (disposed) {
-                return;
-            }
-
-            if (!googleClientId) {
-                setLoadError(
-                "Το Google Client ID δεν έχει ρυθμιστεί.",
-                );
-
                 return;
             }
 
