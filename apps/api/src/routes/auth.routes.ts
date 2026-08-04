@@ -100,14 +100,16 @@ authRouter.post("/register", registerRateLimiter, async (req, res) => {
       },
     });
   } catch (error) {
-    console.error(
-      "Registration failed:",
-      error,
-    );
 
-    res.status(500).json({
-      message: "Unable to create account",
-    });
+    if (isUniqueConstraintErrorFor( error, USER_EMAIL_UNIQUE_FIELDS, )) {
+      res.status(409).json({ message: "An account with this email already exists", });
+
+      return;
+    }
+
+    console.error( "Registration failed:", error, );
+
+    res.status(500).json({ message: "Unable to create account", });
   }
 });
 
@@ -373,9 +375,10 @@ authRouter.post("/google", googleLoginRateLimiter, async (req, res) => {
        * δημιουργήσουν τον ίδιο User ή
        * AuthAccount.
        */
-      if (
-        isUniqueConstraintError(error)
-      ) {
+      const isExpectedGoogleCreationRace = isUniqueConstraintErrorFor(error, USER_EMAIL_UNIQUE_FIELDS,)
+      ||  isUniqueConstraintErrorFor( error, GOOGLE_PROVIDER_ACCOUNT_UNIQUE_FIELDS,);
+
+      if ( isExpectedGoogleCreationRace ) {
         res.status(409).json({ message: "The Google account state changed. Please try signing in again.", });
 
         return;
@@ -521,7 +524,10 @@ authRouter.post("/google/link", googleAccountLinkRateLimiter, async (req, res) =
         return;
       }
 
-      if ( isUniqueConstraintError(error) ) {
+      const isExpectedGoogleLinkRace = isUniqueConstraintErrorFor( error, GOOGLE_PROVIDER_ACCOUNT_UNIQUE_FIELDS,) 
+      || isUniqueConstraintErrorFor( error, USER_PROVIDER_UNIQUE_FIELDS, );
+
+      if ( isExpectedGoogleLinkRace ) {
         res.status(409).json({ message: "The Google account was connected by another request. Please try signing in again.", });
 
         return;
@@ -787,6 +793,63 @@ async function completeAuthentication(
   });
 }
 
-function isUniqueConstraintError( error: unknown, ) {
-  return ( error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002" );
+const USER_EMAIL_UNIQUE_FIELDS = [
+  "email",
+] as const;
+
+const GOOGLE_PROVIDER_ACCOUNT_UNIQUE_FIELDS =
+  [
+    "provider",
+    "providerAccountId",
+  ] as const;
+
+const USER_PROVIDER_UNIQUE_FIELDS = [
+  "userId",
+  "provider",
+] as const;
+
+function isUniqueConstraintErrorFor(
+  error: unknown,
+  expectedFields: readonly string[],
+) {
+  if (
+    !(
+      error instanceof
+      Prisma.PrismaClientKnownRequestError
+    ) ||
+    error.code !== "P2002"
+  ) {
+    return false;
+  }
+
+  const rawTarget =
+    error.meta?.target;
+
+  const targetText =
+    Array.isArray(rawTarget)
+      ? rawTarget
+          .filter(
+            (
+              value,
+            ): value is string =>
+              typeof value === "string",
+          )
+          .join(" ")
+      : typeof rawTarget === "string"
+        ? rawTarget
+        : "";
+
+  if (!targetText) {
+    return false;
+  }
+
+  const normalizedTarget =
+    targetText.toLowerCase();
+
+  return expectedFields.every(
+    (field) =>
+      normalizedTarget.includes(
+        field.toLowerCase(),
+      ),
+  );
 }
