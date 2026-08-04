@@ -9,10 +9,13 @@ import { clearAuthCookies, setAuthCookies,} from "../utils/auth-cookies.js";
 import { signAccessToken, signRefreshToken, verifyRefreshToken,} from "../utils/jwt.js";
 import { Prisma, } from "../generated/prisma/client.js";
 import { GoogleCredentialError, verifyGoogleCredential, } from "../services/google-auth.service.js";
+import { googleAccountLinkRateLimiter, googleLoginRateLimiter, loginAccountRateLimiter,
+loginIpRateLimiter, refreshRateLimiter, registerRateLimiter,
+} from "../middleware/auth-rate-limit.middleware.js";
 
 export const authRouter = Router();
 
-authRouter.post("/register", async (req, res) => {
+authRouter.post("/register", registerRateLimiter, async (req, res) => {
   const parsedBody = registerSchema.safeParse( req.body,);
 
   if (!parsedBody.success) {
@@ -108,7 +111,7 @@ authRouter.post("/register", async (req, res) => {
   }
 });
 
-authRouter.post("/login", async (req, res) => {
+authRouter.post("/login", loginIpRateLimiter, loginAccountRateLimiter, async (req, res) => {
   const parsedBody = loginSchema.safeParse(
     req.body,
   );
@@ -196,7 +199,7 @@ authRouter.post("/login", async (req, res) => {
   }
 });
 
-authRouter.post("/google", async (req, res) => {
+authRouter.post("/google", googleLoginRateLimiter, async (req, res) => {
     const parsedBody = googleLoginSchema.safeParse( req.body, );
 
     if (!parsedBody.success) {
@@ -385,7 +388,7 @@ authRouter.post("/google", async (req, res) => {
   },
 );
 
-authRouter.post("/google/link", async (req, res) => {
+authRouter.post("/google/link", googleAccountLinkRateLimiter, async (req, res) => {
     const parsedBody = googleAccountLinkSchema.safeParse( req.body,);
 
     if (!parsedBody.success) {
@@ -531,7 +534,7 @@ authRouter.post("/google/link", async (req, res) => {
   },
 );
 
-authRouter.post("/refresh", async (req, res) => {
+authRouter.post("/refresh", refreshRateLimiter, async (req, res) => {
   const refreshToken =
     req.cookies[REFRESH_TOKEN_COOKIE];
 
