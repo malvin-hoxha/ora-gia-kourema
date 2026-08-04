@@ -40,13 +40,38 @@ async function parseResponseData(response: Response) { //if the response is json
     return response.json() as Promise<unknown>;
 }
 
-async function refreshSession(): Promise<boolean> {
-    const response = await fetch(`${API_URL}/auth/refresh`, {
-        method: "POST",
-        credentials: "include", //HTTP-only cookies
+let refreshSessionPromise: | Promise<boolean> | null = null;
+
+async function performSessionRefresh(): Promise<boolean> {
+  const response = await fetch(`${API_URL}/auth/refresh`, {
+      method: "POST",
+      credentials: "include",
+    },
+  );
+
+  return response.ok;
+}
+
+function refreshSession(): Promise<boolean> {
+  /*
+   * If a refresh request is already running,
+   * every other unauthorized request waits for
+   * the same Promise instead of starting another
+   * refresh-token rotation.
+   */
+  if (refreshSessionPromise) {
+    return refreshSessionPromise;
+  }
+
+  refreshSessionPromise = performSessionRefresh().finally(() => {
+      /*
+       * After the request finishes, allow a future
+       * expired access token to start a new refresh.
+       */
+      refreshSessionPromise = null;
     });
 
-    return response.ok;
+  return refreshSessionPromise;
 }
 
 export async function apiRequest<T> (

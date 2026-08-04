@@ -9,23 +9,15 @@ import {
   UserRoundIcon,
 } from "lucide-react";
 
-import { useRef } from "react";
+import { useEffect,  useState } from "react";
 
 import { useQuery } from "@tanstack/react-query";
 
-import {
-  Link,
-  useSearchParams,
-} from "react-router-dom";
+import { Link, useSearchParams, } from "react-router-dom";
 
-import {
-  getAppointmentPaymentStatus,
-  type AppointmentPaymentResult,
-} from "../api/appointments.api";
+import { getAppointmentPaymentStatus, type AppointmentPaymentResult, } from "../api/appointments.api";
 
-function formatAppointmentDate(
-  value: string | null,
-) {
+function formatAppointmentDate( value: string | null, ) {
   if (!value) {
     return "Μη διαθέσιμη ημερομηνία";
   }
@@ -43,9 +35,7 @@ function formatAppointmentDate(
   ).format(new Date(value));
 }
 
-function formatPrice(
-  value: number | null,
-) {
+function formatPrice( value: number | null, ) {
   if (value === null) {
     return "—";
   }
@@ -60,19 +50,29 @@ function formatPrice(
 }
 
 export function PaymentSuccessPage() {
-  const [searchParams] =
-    useSearchParams();
+  const [searchParams] = useSearchParams();
 
-  const sessionId =
-    searchParams.get("session_id")?.trim() ??
-    "";
+  const sessionId = searchParams.get("session_id")?.trim() ?? "";
 
   /*
-   * Stop automatic polling after 30 seconds.
-   * The user can still refresh the page.
-   */
-  const pollingStartedAt =
-    useRef(Date.now());
+  * Stop automatic polling after 30 seconds.
+  * The user can still request another check
+  * manually.
+  */
+  const [ isAutomaticPollingEnabled,  setIsAutomaticPollingEnabled, ] = useState(true);
+
+  useEffect(() => {
+    const timeoutId =
+      window.setTimeout(() => {
+        setIsAutomaticPollingEnabled(
+          false,
+        );
+      }, 30_000);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, []);
 
   const paymentQuery = useQuery({
     queryKey: [
@@ -90,29 +90,19 @@ export function PaymentSuccessPage() {
     retry: 1,
 
     refetchInterval: (query) => {
-      const payment =
-        query.state.data;
+      const payment = query.state.data;
 
-      const pollingTimedOut =
-        Date.now() -
-          pollingStartedAt.current >
-        30_000;
-
-      if (pollingTimedOut) {
+      if (!isAutomaticPollingEnabled) {
         return false;
       }
 
-      if (
-        payment?.state ===
-          "PROCESSING" ||
-        payment?.state === "PENDING"
-      ) {
+      if (payment?.state === "PROCESSING" || payment?.state === "PENDING") {
         return 1_500;
       }
 
       return false;
     },
-  });
+});
 
   if (!sessionId) {
     return (
