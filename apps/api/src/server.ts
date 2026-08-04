@@ -12,6 +12,7 @@ import { staffRouter } from "./routes/staff.routes.js";
 import { adminRouter, } from "./routes/admin.routes.js";
 import { env } from "./config/env.js";
 import { adminBarbersRouter, } from "./routes/admin-barbers.routes.js";
+import { stripeWebhookRouter, } from "./routes/stripe-webhook.routes.js";
 
 const app = express();
 
@@ -27,6 +28,15 @@ app.use(
     origin: CLIENT_URL,
     credentials: true,
   }),
+);
+
+/*
+ * Stripe webhook must receive the untouched
+ * raw body before express.json() parses it.
+ */ 
+
+app.use("/api/stripe/webhook", express.raw({ type: "application/json",}),
+  stripeWebhookRouter,
 );
 
 app.use(express.json());

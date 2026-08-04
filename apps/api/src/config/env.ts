@@ -37,6 +37,33 @@ const envSchema = z.object({
     .int()
     .positive()
     .default(30),
+
+  STRIPE_SECRET_KEY: z
+  .string()
+  .trim()
+  .regex(
+    /^(sk|rk)_(test|live)_/,
+    "STRIPE_SECRET_KEY must be a Stripe server-side API key",
+  ),
+
+  STRIPE_CURRENCY: z
+    .enum(["eur"])
+    .default("eur"),
+
+  STRIPE_CHECKOUT_EXPIRES_MINUTES: z.coerce
+    .number()
+    .int()
+    .min(30)
+    .max(1440)
+    .default(30),
+
+  STRIPE_WEBHOOK_SECRET: z
+    .string()
+    .trim()
+    .startsWith(
+      "whsec_",
+      "STRIPE_WEBHOOK_SECRET must start with whsec_",
+  ),
 });
 
 const result = envSchema.safeParse(process.env); //examine if the rules are uploaded correctly

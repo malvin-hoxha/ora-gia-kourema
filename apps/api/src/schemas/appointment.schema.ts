@@ -22,6 +22,13 @@ export const createAppointmentSchema = z.object({
     .trim()
     .max(500, "Notes cannot exceed 500 characters")
     .optional(),
+
+  paymentMethod: z
+    .enum([
+      "PAY_AT_STORE",
+      "STRIPE",
+    ])
+    .default("PAY_AT_STORE"),
 });
 
 export const cancelAppointmentParamsSchema = z.object({

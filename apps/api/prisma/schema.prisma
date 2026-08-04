@@ -32,6 +32,19 @@ enum AppointmentCancelledBy {
   SYSTEM
 }
 
+enum PaymentMethod {
+  PAY_AT_STORE
+  STRIPE
+}
+
+enum PaymentStatus {
+  UNPAID
+  PENDING
+  PAID
+  EXPIRED
+  REFUNDED
+}
+
 model User {
   id           String   @id @default(cuid())
   name         String
@@ -173,6 +186,18 @@ model Appointment {
   cancelledBy        AppointmentCancelledBy?
   cancellationReason String?
 
+  paymentMethod PaymentMethod @default(PAY_AT_STORE)
+  paymentStatus PaymentStatus @default(UNPAID)
+
+  priceAtBooking Decimal? @db.Decimal(10, 2)
+
+  stripeCheckoutSessionId String? @unique
+  stripePaymentIntentId   String? @unique
+
+  paymentExpiresAt DateTime?
+  paidAt           DateTime?
+  refundedAt       DateTime?
+
   customer User    @relation(fields: [customerId], references: [id], onDelete: Cascade)
   barber   Barber  @relation(fields: [barberId], references: [id])
   service  Service @relation(fields: [serviceId], references: [id])
@@ -183,5 +208,6 @@ model Appointment {
   @@index([customerId])
   @@index([barberId, startsAt])
   @@index([serviceId])
+  @@index([paymentStatus, paymentExpiresAt])
   @@map("appointments")
 }

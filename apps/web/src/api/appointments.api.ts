@@ -7,11 +7,74 @@ export type AppointmentStatus =
   | "CANCELLED"
   | "NO_SHOW";
 
+export type PaymentMethod =
+  | "PAY_AT_STORE"
+  | "STRIPE";
+
+export type PaymentStatus =
+  | "UNPAID"
+  | "PENDING"
+  | "PAID"
+  | "EXPIRED"
+  | "REFUNDED";
+
+  export type PaymentResultState =
+  | "PAID"
+  | "PROCESSING"
+  | "PENDING"
+  | "EXPIRED";
+
+export type AppointmentPaymentResult = {
+  appointmentId: string;
+
+  state: PaymentResultState;
+
+  appointmentStatus:
+    AppointmentStatus;
+
+  paymentStatus: PaymentStatus;
+
+  checkoutStatus:
+    | "open"
+    | "complete"
+    | "expired";
+
+  stripePaymentStatus:
+    | "paid"
+    | "unpaid"
+    | "no_payment_required";
+
+  priceAtBooking: number | null;
+
+  localStartsAt: string | null;
+  localEndsAt: string | null;
+  timeZone: string;
+
+  paidAt: string | null;
+  paymentExpiresAt: string | null;
+
+  barber: {
+    id: string;
+    name: string;
+  };
+
+  service: {
+    id: string;
+    name: string;
+    durationMinutes: number;
+  };
+};
+
+type AppointmentPaymentResultResponse = {
+  data: AppointmentPaymentResult;
+};
+
 export type CreateAppointmentInput = {
   barberId: string;
   serviceId: string;
   startsAt: string;
   notes?: string;
+  paymentMethod: PaymentMethod;
 };
 
 export type Appointment = {
@@ -36,6 +99,18 @@ export type Appointment = {
 
   cancellationReason: string | null;
 
+  paymentMethod: PaymentMethod;
+  paymentStatus: PaymentStatus;
+
+  priceAtBooking: number | null;
+
+  stripeCheckoutSessionId: string | null;
+  stripePaymentIntentId: string | null;
+
+  paymentExpiresAt: string | null;
+  paidAt: string | null;
+  refundedAt: string | null;
+
   barber: {
     id: string;
     name: string;
@@ -50,7 +125,7 @@ export type Appointment = {
   };
 };
 
-export type CreatedAppointment = Appointment;
+export type CreatedAppointment = Appointment & { checkoutUrl: string | null; };
 
 export type MyAppointments = {
   upcoming: Appointment[];
@@ -106,6 +181,19 @@ export async function cancelAppointment(
       {
         method: "PATCH",
       },
+    );
+
+  return response.data;
+}
+
+export async function getAppointmentPaymentStatus(
+  sessionId: string,
+) {
+  const response =
+    await apiRequest<AppointmentPaymentResultResponse>(
+      `/appointments/payment-status?sessionId=${encodeURIComponent(
+        sessionId,
+      )}`,
     );
 
   return response.data;

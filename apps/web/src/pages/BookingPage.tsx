@@ -1,4 +1,5 @@
-import { ArrowLeftIcon, ArrowRightIcon, CalendarDaysIcon, CheckIcon, Clock3Icon, LoaderCircleIcon, ScissorsIcon, UserRoundIcon,} from "lucide-react";
+import { ArrowLeftIcon, ArrowRightIcon, CalendarDaysIcon, CheckIcon, Clock3Icon, LoaderCircleIcon, ScissorsIcon, 
+CreditCardIcon, StoreIcon, UserRoundIcon,} from "lucide-react";
 
 import {useMemo,useState,} from "react";
 
@@ -8,7 +9,7 @@ import { Link, useNavigate,} from "react-router-dom";
 
 import type { AvailableSlot } from "../api/availability.api";
 
-import { createAppointment, type CreatedAppointment,} from "../api/appointments.api";
+import { createAppointment, type CreatedAppointment, type PaymentMethod, } from "../api/appointments.api";
 
 import { ApiError } from "../api/api-client";
 import type { Barber } from "../api/barbers.api";
@@ -100,6 +101,8 @@ export function BookingPage() {
 
     const [notes, setNotes] = useState("");
 
+    const [ paymentMethod, setPaymentMethod, ] = useState<PaymentMethod>( "PAY_AT_STORE", );
+
     const [createdAppointment, setCreatedAppointment] = useState<CreatedAppointment | null>(null); //success POST /appointments => new appointment
 
     const servicesQuery = useServices(); //React Query hook useServices
@@ -137,16 +140,23 @@ export function BookingPage() {
         mutationFn: createAppointment,
 
         onSuccess: async (appointment) => {
-          setCreatedAppointment(appointment);
-
-          await queryClient.invalidateQueries({ //invalidateQueries 
+          await queryClient.invalidateQueries({
             queryKey: [
               "availability",
               selectedBarberId,
               selectedServiceId,
               selectedDate,
             ],
-        });
+          });
+
+          if (appointment.checkoutUrl) {
+            window.location.assign(
+              appointment.checkoutUrl,
+            );
+
+            return;
+          }
+          setCreatedAppointment(appointment);
         },
     });
 
@@ -202,10 +212,11 @@ export function BookingPage() {
         }
 
         await createAppointmentMutation.mutateAsync({
-            barberId: selectedBarberId,
-            serviceId: selectedServiceId,
-            startsAt: selectedSlot.localStartsAt,
-            notes: notes.trim() || undefined,
+          barberId: selectedBarberId,
+          serviceId: selectedServiceId,
+          startsAt: selectedSlot.localStartsAt,
+          notes: notes.trim() || undefined,
+          paymentMethod,
         });
     }
 
@@ -393,6 +404,10 @@ export function BookingPage() {
                           slot={selectedSlot}
                           notes={notes}
                           onNotesChange={setNotes}
+                          paymentMethod={paymentMethod}
+                          onPaymentMethodChange={
+                            setPaymentMethod
+                          }
                           onConfirm={() => {
                               void confirmAppointment();
                           }}
@@ -762,6 +777,8 @@ type ConfirmationStepProps = {
   slot: AvailableSlot;
   notes: string;
   onNotesChange: (notes: string) => void;
+  paymentMethod: PaymentMethod;
+  onPaymentMethodChange: ( paymentMethod: PaymentMethod, ) => void;
   onConfirm: () => void;
   isSubmitting: boolean;
   error: Error | null;
@@ -777,6 +794,8 @@ function ConfirmationStep({
   onConfirm,
   isSubmitting,
   error,
+  paymentMethod,
+  onPaymentMethodChange,
 }: ConfirmationStepProps) {
   const formattedDate = new Intl.DateTimeFormat(
     "el-GR",
@@ -842,8 +861,93 @@ function ConfirmationStep({
           </div>
         </div>
 
+        <div>
+          <p className="text-sm font-medium text-slate-700">
+            Τρόπος πληρωμής
+          </p>
+
+          <div className="mt-3 grid gap-3">
+            <button
+              type="button"
+              disabled={isSubmitting}
+              aria-pressed={
+                paymentMethod ===
+                "PAY_AT_STORE"
+              }
+              onClick={() =>
+                onPaymentMethodChange(
+                  "PAY_AT_STORE",
+                )
+              }
+              className={[
+                "flex items-start gap-3 rounded-xl border bg-white p-4 text-left transition disabled:cursor-not-allowed disabled:opacity-60",
+                paymentMethod ===
+                "PAY_AT_STORE"
+                  ? "border-orange-400 ring-4 ring-orange-100"
+                  : "border-black/10 hover:border-orange-200",
+              ].join(" ")}
+            >
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-orange-50 text-orange-500">
+                <StoreIcon className="size-5" />
+              </div>
+
+              <div>
+                <p className="text-sm font-semibold text-slate-900">
+                  Πληρωμή στο κατάστημα
+                </p>
+
+                <p className="mt-1 text-xs leading-5 text-gray-500">
+                  Θα πληρώσεις κατά την επίσκεψή
+                  σου στο κατάστημα.
+                </p>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              disabled={isSubmitting}
+              aria-pressed={
+                paymentMethod === "STRIPE"
+              }
+              onClick={() =>
+                onPaymentMethodChange(
+                  "STRIPE",
+                )
+              }
+              className={[
+                "flex items-start gap-3 rounded-xl border bg-white p-4 text-left transition disabled:cursor-not-allowed disabled:opacity-60",
+                paymentMethod === "STRIPE"
+                  ? "border-orange-400 ring-4 ring-orange-100"
+                  : "border-black/10 hover:border-orange-200",
+              ].join(" ")}
+            >
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-orange-50 text-orange-500">
+                <CreditCardIcon className="size-5" />
+              </div>
+
+              <div>
+                <p className="text-sm font-semibold text-slate-900">
+                  Online πληρωμή
+                </p>
+
+                <p className="mt-1 text-xs leading-5 text-gray-500">
+                  Θα μεταφερθείς με ασφάλεια στη
+                  Stripe για την πληρωμή.
+                </p>
+              </div>
+            </button>
+          </div>
+
+          {paymentMethod === "STRIPE" && (
+            <p className="mt-3 text-xs leading-5 text-orange-700">
+              Το ραντεβού θα κρατηθεί προσωρινά
+              μέχρι να ολοκληρωθεί η πληρωμή.
+            </p>
+          )}
+        </div>
+
         <div className="rounded-2xl border border-orange-100 bg-orange-50/70 p-6">
-          <label className="block">
+          <label className="mt-6 block">
             <span className="text-sm font-medium text-slate-700">
               Σημειώσεις
             </span>
@@ -880,7 +984,7 @@ function ConfirmationStep({
               <CheckIcon className="size-4" />
             )}
 
-            Επιβεβαίωση ραντεβού
+            {paymentMethod === "STRIPE" ? "Συνέχεια στην πληρωμή" : "Επιβεβαίωση ραντεβού"}
           </button>
         </div>
       </div>

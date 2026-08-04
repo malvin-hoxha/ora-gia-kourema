@@ -7,12 +7,44 @@ import { cancelAppointmentParamsSchema, createAppointmentSchema,} from "../schem
 import { createZonedDateTime, isAlignedToSlotInterval, SLOT_INTERVAL_MINUTES,} from "../utils/availability.js";
 import { BOOKING_WINDOW_DAYS } from "../constants/auth.constants.js";
 import { safelySendEmail, sendBookingCreatedEmail, sendBookingCancelledEmail,} from "../services/email/email.service.js";
+import { createAppointmentCheckoutSession, safelyExpireCheckoutSession,} from "../services/stripe-checkout.service.js";
+import { stripe } from "../config/stripe.js";
 
 import { requireAuth } from "../middleware/auth.middleware.js";
 
 export const appointmentsRouter = Router();
 
 const MAX_TRANSACTION_RETRIES = 3;
+
+async function markStripeSetupAsFailed( appointmentId: string, ) {
+  try {
+    await prisma.appointment.updateMany({
+      where: {
+        id: appointmentId,
+        paymentMethod: "STRIPE",
+        paymentStatus: "PENDING",
+      },
+
+      data: {
+        status: "CANCELLED",
+
+        cancelledAt: new Date(),
+        cancelledBy: "SYSTEM",
+
+        cancellationReason:
+          "Online payment setup failed",
+
+        paymentStatus: "EXPIRED",
+        paymentExpiresAt: new Date(),
+      },
+    });
+  } catch (error) {
+    console.error(
+      "Failed to cancel appointment after Stripe setup failure:",
+      error,
+    );
+  }
+}
 
 const appointmentSelect = {
   id: true,
@@ -25,6 +57,17 @@ const appointmentSelect = {
   cancelledAt: true,
   cancelledBy: true,
   cancellationReason: true,
+
+  paymentMethod: true,
+  paymentStatus: true,
+  priceAtBooking: true,
+
+  stripeCheckoutSessionId: true,
+  stripePaymentIntentId: true,
+
+  paymentExpiresAt: true,
+  paidAt: true,
+  refundedAt: true,
 
   barber: {
     select: {
@@ -50,8 +93,7 @@ type AppointmentResult = Prisma.AppointmentGetPayload<{
 }>;
 
 function formatAppointment( appointment: AppointmentResult, ) {
-  const timeZone =
-    process.env.BARBERSHOP_TIME_ZONE ?? "Europe/Athens";
+  const timeZone = process.env.BARBERSHOP_TIME_ZONE ?? "Europe/Athens";
 
   const localStartsAt = DateTime.fromJSDate(
     appointment.startsAt,
@@ -73,6 +115,10 @@ function formatAppointment( appointment: AppointmentResult, ) {
 
   return {
     ...appointment,
+
+    priceAtBooking: appointment.priceAtBooking === null ? null : Number(
+      appointment.priceAtBooking,
+    ),
 
     service: {
       ...appointment.service,
@@ -148,6 +194,211 @@ appointmentsRouter.get("/me", requireAuth, async (req, res) => {
       res.status(500).json({
         message:
           "Unable to retrieve appointments",
+      });
+    }
+  },
+);
+
+appointmentsRouter.get(
+  "/payment-status",
+  requireAuth,
+  async (req, res) => {
+    if (req.user!.role !== "CUSTOMER") {
+      res.status(403).json({
+        message: "Forbidden",
+      });
+
+      return;
+    }
+
+    const sessionId =
+      typeof req.query.sessionId === "string"
+        ? req.query.sessionId.trim()
+        : "";
+
+    if (
+      !sessionId.startsWith("cs_") ||
+      sessionId.length > 255
+    ) {
+      res.status(400).json({
+        message:
+          "Invalid Stripe Checkout Session id",
+      });
+
+      return;
+    }
+
+    try {
+      /*
+       * Find the appointment first and ensure
+       * that it belongs to the authenticated
+       * customer.
+       */
+      const appointment =
+        await prisma.appointment.findFirst({
+          where: {
+            customerId: req.user!.id,
+            paymentMethod: "STRIPE",
+
+            stripeCheckoutSessionId:
+              sessionId,
+          },
+
+          select: {
+            id: true,
+            startsAt: true,
+            endsAt: true,
+
+            status: true,
+            paymentStatus: true,
+
+            priceAtBooking: true,
+
+            paidAt: true,
+            paymentExpiresAt: true,
+
+            barber: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+
+            service: {
+              select: {
+                id: true,
+                name: true,
+                durationMinutes: true,
+              },
+            },
+          },
+        });
+
+      if (!appointment) {
+        res.status(404).json({
+          message:
+            "Payment appointment not found",
+        });
+
+        return;
+      }
+
+      /*
+       * Retrieve the Session server-side.
+       * The secret Stripe key never reaches
+       * the browser.
+       */
+      const checkoutSession =
+        await stripe.checkout.sessions.retrieve(
+          sessionId,
+        );
+
+      let state:
+        | "PAID"
+        | "PROCESSING"
+        | "PENDING"
+        | "EXPIRED";
+
+      if (
+        appointment.paymentStatus === "PAID"
+      ) {
+        state = "PAID";
+      } else if (
+        appointment.paymentStatus ===
+          "EXPIRED" ||
+        appointment.status === "CANCELLED" ||
+        checkoutSession.status === "expired"
+      ) {
+        state = "EXPIRED";
+      } else if (
+        checkoutSession.payment_status ===
+          "paid" ||
+        checkoutSession.status === "complete"
+      ) {
+        /*
+         * Stripe reports completion, but our
+         * webhook has not updated the local
+         * appointment yet.
+         */
+        state = "PROCESSING";
+      } else {
+        state = "PENDING";
+      }
+
+      const timeZone =
+        process.env
+          .BARBERSHOP_TIME_ZONE ??
+        "Europe/Athens";
+
+      const localStartsAt =
+        DateTime.fromJSDate(
+          appointment.startsAt,
+          {
+            zone: "utc",
+          },
+        )
+          .setZone(timeZone)
+          .toISO();
+
+      const localEndsAt =
+        DateTime.fromJSDate(
+          appointment.endsAt,
+          {
+            zone: "utc",
+          },
+        )
+          .setZone(timeZone)
+          .toISO();
+
+      res.status(200).json({
+        data: {
+          appointmentId:
+            appointment.id,
+
+          state,
+
+          appointmentStatus:
+            appointment.status,
+
+          paymentStatus:
+            appointment.paymentStatus,
+
+          checkoutStatus:
+            checkoutSession.status,
+
+          stripePaymentStatus:
+            checkoutSession.payment_status,
+
+          priceAtBooking:
+            appointment.priceAtBooking ===
+            null
+              ? null
+              : Number(
+                  appointment.priceAtBooking,
+                ),
+
+          localStartsAt,
+          localEndsAt,
+          timeZone,
+
+          paidAt: appointment.paidAt,
+
+          paymentExpiresAt:
+            appointment.paymentExpiresAt,
+
+          barber: appointment.barber,
+          service: appointment.service,
+        },
+      });
+    } catch (error) {
+      console.error(
+        "Failed to retrieve Stripe payment status:",
+        error,
+      );
+
+      res.status(500).json({
+        message:
+          "Unable to retrieve payment status",
       });
     }
   },
@@ -338,91 +589,220 @@ appointmentsRouter.patch("/:appointmentId/cancel", requireAuth, async (req, res)
 );
 
 appointmentsRouter.post("/", requireAuth, async (req, res) => {
-  if (req.user!.role !== "CUSTOMER") {
-    res.status(403).json({
-      message: "Forbidden",
-    });
+    if (req.user!.role !== "CUSTOMER") {
+      res.status(403).json({
+        message: "Forbidden",
+      });
 
-    return;
-  }
+      return;
+    }
 
-  const parsedBody = createAppointmentSchema.safeParse(req.body);
+    const parsedBody = createAppointmentSchema.safeParse( req.body, );
 
-  if (!parsedBody.success) {
-    res.status(400).json({
-      message: "Invalid appointment data",
-      errors: parsedBody.error.flatten().fieldErrors,
-    });
+    if (!parsedBody.success) {
+      res.status(400).json({
+        message: "Invalid appointment data",
 
-    return;
-  }
+        errors: parsedBody.error.flatten()  .fieldErrors,
+      });
 
-  const {
-    barberId,
-    serviceId,
-    startsAt,
-    notes,
-  } = parsedBody.data;
+      return;
+    }
 
-  try {
-    const appointment = await createAppointmentWithRetry({
-      customerId: req.user!.id,
+    const {
       barberId,
       serviceId,
       startsAt,
       notes,
-    });
+      paymentMethod,
+    } = parsedBody.data;
 
-    await safelySendEmail(() => sendBookingCreatedEmail({
-      customerName:
-        appointment.customer.name,
+    try {
+      const appointment =
+        await createAppointmentWithRetry({
+          customerId: req.user!.id,
+          barberId,
+          serviceId,
+          startsAt,
+          notes,
+          paymentMethod,
+        });
 
-      customerEmail:
-        appointment.customer.email,
+      /*
+       * Payment at the barbershop.
+       * No Stripe Checkout Session is needed.
+       */
+      if (
+        paymentMethod === "PAY_AT_STORE"
+      ) {
+        await safelySendEmail(() =>
+          sendBookingCreatedEmail({
+            customerName:
+              appointment.customer.name,
 
-      barberName:
-        appointment.barber.name,
+            customerEmail:
+              appointment.customer.email,
 
-      serviceName:
-        appointment.service.name,
+            barberName:
+              appointment.barber.name,
 
-      startsAt:
-        appointment.startsAt,
+            serviceName:
+              appointment.service.name,
 
-      price:
-        appointment.service.price,
-      }),
-    );
+            startsAt:
+              appointment.startsAt,
 
-    res.status(201).json({
-      message: "Appointment created successfully",
-      data: appointment,
-    });
+            price:
+              appointment.priceAtBooking ??
+              appointment.service.price,
+          }),
+        );
 
-  } catch (error) {
-    if (error instanceof AppointmentConflictError) {
-      res.status(409).json({
-        message: error.message,
+        res.status(201).json({
+          message:
+            "Appointment created successfully",
+
+          data: {
+            ...appointment,
+            checkoutUrl: null,
+          },
+        });
+
+        return;
+      }
+
+      /*
+       * Online payment through Stripe.
+       */
+      let checkoutSessionId:
+        | string
+        | null = null;
+
+      try {
+        const checkoutSession =
+          await createAppointmentCheckoutSession({
+            appointmentId:
+              appointment.id,
+
+            customerId:
+              req.user!.id,
+
+            customerEmail:
+              appointment.customer.email,
+
+            barberName:
+              appointment.barber.name,
+
+            serviceName:
+              appointment.service.name,
+
+            startsAt:
+              appointment.startsAt,
+
+            price:
+              appointment.priceAtBooking ??
+              appointment.service.price,
+          });
+
+        checkoutSessionId =
+          checkoutSession.id;
+
+        const paymentExpiresAt =
+          new Date(
+            checkoutSession.expires_at *
+              1000,
+          );
+
+        await prisma.appointment.update({
+          where: {
+            id: appointment.id,
+          },
+
+          data: {
+            stripeCheckoutSessionId:
+              checkoutSession.id,
+
+            paymentExpiresAt,
+          },
+        });
+
+        res.status(201).json({
+          message:
+            "Appointment created. Complete the online payment.",
+
+          data: {
+            ...appointment,
+
+            stripeCheckoutSessionId:
+              checkoutSession.id,
+
+            paymentExpiresAt,
+
+            checkoutUrl:
+              checkoutSession.url,
+          },
+        });
+
+        return;
+      } catch (error) {
+        /*
+         * Stripe Session may have been created,
+         * but saving it in our database may
+         * have failed.
+         */
+        if (checkoutSessionId) {
+          await safelyExpireCheckoutSession(
+            checkoutSessionId,
+          );
+        }
+
+        /*
+         * Cancel the local appointment so that
+         * the slot does not remain blocked.
+         */
+        await markStripeSetupAsFailed(
+          appointment.id,
+        );
+
+        throw error;
+      }
+    } catch (error) {
+      if (
+        error instanceof
+        AppointmentConflictError
+      ) {
+        res.status(409).json({
+          message: error.message,
+        });
+
+        return;
+      }
+
+      if (
+        error instanceof
+        AppointmentValidationError
+      ) {
+        res
+          .status(error.statusCode)
+          .json({
+            message: error.message,
+          });
+
+        return;
+      }
+
+      console.error(
+        "Failed to create appointment:",
+        error,
+      );
+
+      res.status(500).json({
+        message:
+          "Unable to create appointment",
       });
-
-      return;
     }
-
-    if (error instanceof AppointmentValidationError) {
-      res.status(error.statusCode).json({
-        message: error.message,
-      });
-
-      return;
-    }
-
-    console.error("Failed to create appointment:", error);
-
-    res.status(500).json({
-      message: "Unable to create appointment",
-    });
-  }
-});
+  },
+);
 
 type CreateAppointmentTransactionInput = {
   customerId: string;
@@ -430,6 +810,8 @@ type CreateAppointmentTransactionInput = {
   serviceId: string;
   startsAt: string;
   notes?: string;
+
+  paymentMethod: | "PAY_AT_STORE" | "STRIPE";
 };
 
 async function createAppointmentWithRetry( input: CreateAppointmentTransactionInput, ) {
@@ -697,7 +1079,14 @@ async function createAppointmentTransaction( tx: Prisma.TransactionClient, input
       endsAt: endsAtUtc,
       status: "PENDING",
       notes: input.notes || null,
+
+      paymentMethod: input.paymentMethod,
+
+      paymentStatus: input.paymentMethod === "STRIPE" ? "PENDING" : "UNPAID",
+
+      priceAtBooking: service.price,
     },
+
     select: {
       id: true,
       startsAt: true,
@@ -705,6 +1094,18 @@ async function createAppointmentTransaction( tx: Prisma.TransactionClient, input
       status: true,
       notes: true,
       createdAt: true,
+
+      paymentMethod: true,
+      paymentStatus: true,
+      priceAtBooking: true,
+
+      stripeCheckoutSessionId: true,
+      stripePaymentIntentId: true,
+
+      paymentExpiresAt: true,
+      paidAt: true,
+      refundedAt: true,
+
       customer: {
         select: {
           id: true,
@@ -752,5 +1153,9 @@ async function createAppointmentTransaction( tx: Prisma.TransactionClient, input
       .setZone(timeZone)
       .toISO(),
     timeZone,
+
+    priceAtBooking: appointment.priceAtBooking === null ? null : Number(
+      appointment.priceAtBooking,
+    ),
   };
 }

@@ -9,6 +9,8 @@ import { StaffRoute } from "./auth/StaffRoute";
 import { StaffDashboardPage } from "./pages/StaffDashboardPage";
 import { AdminRoute } from "./auth/AdminRoute";
 import { AdminDashboardPage } from "./pages/AdminDashboardPage";
+import { PaymentSuccessPage, } from "./pages/PaymentSuccessPage";
+import { PaymentCancelledPage, } from "./pages/PaymentCancelledPage";
 
 
 const App = () => {
@@ -29,6 +31,28 @@ const App = () => {
         element={
           <ProtectedRoute allowedRoles={["CUSTOMER"]}>
             <BookingPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/booking/payment-success"
+        element={
+          <ProtectedRoute
+            allowedRoles={["CUSTOMER"]}
+          >
+            <PaymentSuccessPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/booking/payment-cancelled"
+        element={
+          <ProtectedRoute
+            allowedRoles={["CUSTOMER"]}
+          >
+            <PaymentCancelledPage />
           </ProtectedRoute>
         }
       />
