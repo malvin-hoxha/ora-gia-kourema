@@ -199,10 +199,7 @@ appointmentsRouter.get("/me", requireAuth, async (req, res) => {
   },
 );
 
-appointmentsRouter.get(
-  "/payment-status",
-  requireAuth,
-  async (req, res) => {
+appointmentsRouter.get("/payment-status", requireAuth,  async (req, res) => {
     if (req.user!.role !== "CUSTOMER") {
       res.status(403).json({
         message: "Forbidden",
@@ -1105,57 +1102,55 @@ async function createAppointmentTransaction( tx: Prisma.TransactionClient, input
       paymentExpiresAt: true,
       paidAt: true,
       refundedAt: true,
-
-      customer: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-        },
-      },
-      barber: {
-        select: {
-          id: true,
-          name: true,
-        },
-      },
-      service: {
-        select: {
-          id: true,
-          name: true,
-          durationMinutes: true,
-          price: true,
-        },
-      },
     },
   });
 
   return {
     ...appointment,
-    service: {
-      ...appointment.service,
-      price: Number(appointment.service.price),
+
+    customer: {
+      id: customer.id,
+      name: customer.name,
+      email: customer.email,
     },
-    localStartsAt: DateTime.fromJSDate(
-      appointment.startsAt,
-      {
-        zone: "utc",
-      },
-    )
-      .setZone(timeZone)
-      .toISO(),
-    localEndsAt: DateTime.fromJSDate(
-      appointment.endsAt,
-      {
-        zone: "utc",
-      },
-    )
-      .setZone(timeZone)
-      .toISO(),
+
+    barber: {
+      id: barber.id,
+      name: barber.name,
+    },
+
+    service: {
+      id: service.id,
+      name: service.name,
+
+      durationMinutes:
+        service.durationMinutes,
+
+      price: Number(service.price),
+    },
+
+    localStartsAt:
+      DateTime.fromJSDate(
+        appointment.startsAt,
+        {
+          zone: "utc",
+        },
+      )
+        .setZone(timeZone)
+        .toISO(),
+
+    localEndsAt:
+      DateTime.fromJSDate(
+        appointment.endsAt,
+        {
+          zone: "utc",
+        },
+      )
+        .setZone(timeZone)
+        .toISO(),
+
     timeZone,
 
-    priceAtBooking: appointment.priceAtBooking === null ? null : Number(
-      appointment.priceAtBooking,
-    ),
+    priceAtBooking: appointment.priceAtBooking === null ? null : Number(appointment.priceAtBooking,),
   };
 }

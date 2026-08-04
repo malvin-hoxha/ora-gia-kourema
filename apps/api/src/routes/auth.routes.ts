@@ -6,7 +6,7 @@ import { prisma } from "../lib/prisma.js";
 import { loginSchema, registerSchema, googleAccountLinkSchema, googleLoginSchema,} from "../schemas/auth.schema.js";
 import { createAuthSession } from "../services/auth.service.js";
 import { clearAuthCookies, setAuthCookies,} from "../utils/auth-cookies.js";
-import { signAccessToken, signRefreshToken, verifyRefreshToken,} from "../utils/jwt.js";
+import { signAccessToken, signRefreshToken, verifyRefreshToken, RefreshTokenVerificationError, } from "../utils/jwt.js";
 import { Prisma, } from "../generated/prisma/client.js";
 import { GoogleCredentialError, verifyGoogleCredential, } from "../services/google-auth.service.js";
 import { googleAccountLinkRateLimiter, googleLoginRateLimiter, loginAccountRateLimiter,
@@ -592,19 +592,40 @@ authRouter.post("/refresh", refreshRateLimiter, async (req, res) => {
     );
 
     if (!tokenMatches) {
-      await prisma.session.update({
-        where: {
-          id: session.id,
-        },
-        data: {
-          revokedAt: new Date(),
-        },
-      });
-
+      /*
+      * The presented token is already known to
+      * be invalid, so remove it from the browser
+      * even if database revocation later fails.
+      */
       clearAuthCookies(res);
 
+      try {
+        await prisma.session.update({
+          where: {
+            id: session.id,
+          },
+
+          data: {
+            revokedAt: new Date(),
+          },
+        });
+      } catch (error) {
+        console.error(
+          "Failed to revoke session after refresh token reuse detection:",
+          error,
+        );
+
+        res.status(500).json({
+          message:
+            "Unable to secure the session",
+        });
+
+        return;
+      }
+
       res.status(401).json({
-        message: "Refresh token reuse detected",
+        message:
+          "Refresh token reuse detected",
       });
 
       return;
@@ -642,13 +663,24 @@ authRouter.post("/refresh", refreshRateLimiter, async (req, res) => {
     res.status(200).json({
       message: "Session refreshed successfully",
     });
-  } catch {
-    clearAuthCookies(res);
+  } catch (error) {
+      if ( error instanceof RefreshTokenVerificationError ) {
+        clearAuthCookies(res);
 
-    res.status(401).json({
-      message: "Refresh token is invalid or expired",
-    });
-  }
+        res.status(401).json({ message: "Refresh token is invalid or expired", });
+
+        return;
+      }
+
+      /*
+      * Database, Argon2, token-signing or other
+      * internal failures must not invalidate an
+      * otherwise valid browser session.
+      */
+      console.error( "Failed to refresh session:", error, );
+
+      res.status(500).json({ message: "Unable to refresh session. Please try again.", });
+    }
 });
 
 authRouter.post("/logout", async (req, res) => {

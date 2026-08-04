@@ -1,9 +1,18 @@
 import {
   jwtVerify,
+  errors as joseErrors,
   SignJWT,
   type JWTPayload,
 } from "jose";
 import { env } from "../config/env.js";
+
+export class RefreshTokenVerificationError extends Error {
+  constructor() {
+    super("Refresh token is invalid or expired",);
+
+    this.name = "RefreshTokenVerificationError";
+  }
+}
 
 const accessSecret = new TextEncoder().encode( //encode => to bytes / Uint8Array
   env.JWT_ACCESS_SECRET,
@@ -93,18 +102,49 @@ export async function verifyAccessToken(token: string,): Promise<AccessTokenPayl
 export async function verifyRefreshToken(
   token: string,
 ): Promise<RefreshTokenPayload> {
-  const { payload } = await jwtVerify(
-    token,
-    refreshSecret,
-  );
+  try {
+    const { payload } = await jwtVerify(
+      token,
+      refreshSecret,
+    );
 
-  if (
-    payload.type !== "refresh" ||
-    typeof payload.sub !== "string" ||
-    typeof payload.sessionId !== "string"
-  ) {
-    throw new Error("Invalid refresh token");
+    if (
+      payload.type !== "refresh" ||
+      typeof payload.sub !== "string" ||
+      typeof payload.sessionId !==
+        "string"
+    ) {
+      throw new RefreshTokenVerificationError();
+    }
+
+    return payload as RefreshTokenPayload;
+  } catch (error) {
+    /*
+     * Our own payload validation error.
+     */
+    if (
+      error instanceof
+      RefreshTokenVerificationError
+    ) {
+      throw error;
+    }
+
+    /*
+     * Expected JWT verification failures:
+     * expired token, invalid signature,
+     * malformed token, invalid claims, etc.
+     */
+    if (
+      error instanceof
+      joseErrors.JOSEError
+    ) {
+      throw new RefreshTokenVerificationError();
+    }
+
+    /*
+     * Unexpected programming/runtime errors
+     * must not be presented as invalid tokens.
+     */
+    throw error;
   }
-
-  return payload as RefreshTokenPayload;
 }
