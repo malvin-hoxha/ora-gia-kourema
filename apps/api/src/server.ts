@@ -1,142 +1,105 @@
-import "dotenv/config";
-import cookieParser from "cookie-parser";
-import cors, { type CorsOptions, } from "cors";
-import express from "express";
-import helmet from "helmet";
-import { prisma } from "./lib/prisma.js";
-import { servicesRouter } from "./routes/service.route.js"
-import { barbersRouter } from "./routes/barbers.routes.js";
-import { appointmentsRouter } from "./routes/appointments.routes.js";
-import { authRouter } from "./routes/auth.routes.js";
-import { staffRouter } from "./routes/staff.routes.js";
-import { adminRouter, } from "./routes/admin.routes.js";
+import type { Server } from "node:http";
+import { app } from "./app.js";
 import { env } from "./config/env.js";
-import { adminBarbersRouter, } from "./routes/admin-barbers.routes.js";
-import { stripeWebhookRouter, } from "./routes/stripe-webhook.routes.js";
+import { prisma } from "./lib/prisma.js";
 
-const app = express();
+let server: Server | undefined;
+let prismaConnected = false;
+let shutdownPromise: Promise<void> | undefined;
 
-app.set(
-  "trust proxy",
-  env.TRUST_PROXY,
-);
+function listenForRequests() {
+  return new Promise<void>((resolve, reject) => {
+    const listeningServer = app.listen(env.PORT);
+    server = listeningServer;
 
-const PORT = env.PORT;
+    const handleListening = () => {
+      listeningServer.off("error", handleError);
+      resolve();
+    };
 
-const allowedOrigins = new Set(
-  env.CORS_ALLOWED_ORIGINS,
-);
+    const handleError = (error: Error) => {
+      listeningServer.off("listening", handleListening);
+      reject(error);
+    };
 
-const corsOptions: CorsOptions = {
-  origin(origin, callback) {
-    /*
-     * Requests without an Origin header include
-     * server-to-server requests, Stripe webhooks,
-     * curl and local tooling.
-     */
-    if (!origin || allowedOrigins.has(origin)) {
-      callback(null, true);
-      return;
-    }
-
-    /*
-     * Do not throw a generic server error.
-     * Simply omit CORS permission for an
-     * unapproved browser origin.
-     */
-    callback(null, false);
-  },
-
-  credentials: true,
-
-  methods: [
-    "GET",
-    "HEAD",
-    "POST",
-    "PUT",
-    "PATCH",
-    "DELETE",
-  ],
-
-  allowedHeaders: [
-    "Content-Type",
-  ],
-
-  optionsSuccessStatus: 204,
-  maxAge: 600,
-};
-
-app.use(helmet());
-
-app.use(cors(corsOptions));
-
-/*
- * Stripe webhook must receive the untouched
- * raw body before express.json() parses it.
- */ 
-
-app.use("/api/stripe/webhook", express.raw({ type: "application/json",}),
-  stripeWebhookRouter,
-);
-
-app.use(express.json());
-app.use(cookieParser());
-
-app.use("/api/auth", authRouter);
-app.use("/api/services", servicesRouter);
-app.use("/api/barbers", barbersRouter);
-app.use("/api/appointments", appointmentsRouter);
-app.use("/api/staff", staffRouter);
-app.use("/api/admin", adminRouter);
-app.use("/api/admin", adminBarbersRouter);
-
-
-app.get("/api/health", async (_req, res) => {
-  try {
-    await prisma.$queryRaw`SELECT 1`;
-
-    res.status(200).json({
-      status: "ok",
-      message: "OraGiaKourema API is running",
-      database: "connected",
-    });
-  } catch (error) {
-    console.error("Database health check failed:", error);
-
-    res.status(503).json({
-      status: "error",
-      message: "Database connection failed",
-      database: "disconnected",
-    });
-  }
-});
+    listeningServer.once("listening", handleListening);
+    listeningServer.once("error", handleError);
+  });
+}
 
 async function startServer() {
   try {
     await prisma.$connect();
+    prismaConnected = true;
 
-    app.listen(PORT, () => {
-      console.log(`API running at http://localhost:${PORT}`);
-    });
+    await listenForRequests();
+
+    console.log(`API running at http://localhost:${env.PORT}`);
   } catch (error) {
     console.error("Failed to start the server:", error);
-    process.exit(1);
+    await shutdown("Startup failure", 1);
   }
 }
 
-async function shutdown(signal: string) {
-  console.log(`${signal} received. Closing server...`);
+function closeHttpServer() {
+  const activeServer = server;
+  server = undefined;
 
-  await prisma.$disconnect();
-  process.exit(0);
+  if (!activeServer?.listening) {
+    return Promise.resolve();
+  }
+
+  return new Promise<void>((resolve, reject) => {
+    activeServer.close((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve();
+    });
+  });
+}
+
+function shutdown(reason: string, requestedExitCode = 0) {
+  if (shutdownPromise) {
+    return shutdownPromise;
+  }
+
+  shutdownPromise = (async () => {
+    console.log(`${reason}. Closing server...`);
+
+    let exitCode = requestedExitCode;
+
+    try {
+      await closeHttpServer();
+    } catch (error) {
+      exitCode = 1;
+      console.error("Failed to close the HTTP server:", error);
+    }
+
+    if (prismaConnected) {
+      try {
+        await prisma.$disconnect();
+        prismaConnected = false;
+      } catch (error) {
+        exitCode = 1;
+        console.error("Failed to disconnect Prisma:", error);
+      }
+    }
+
+    process.exit(exitCode);
+  })();
+
+  return shutdownPromise;
 }
 
 process.on("SIGINT", () => {
-  void shutdown("SIGINT");
+  void shutdown("SIGINT received");
 });
 
 process.on("SIGTERM", () => {
-  void shutdown("SIGTERM");
+  void shutdown("SIGTERM received");
 });
 
 void startServer();

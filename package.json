@@ -14,6 +14,10 @@
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
     "db:seed": "npm run prisma:seed --workspace=apps/api",
-    "db:studio": "npm run prisma:studio --workspace=apps/api"
+    "db:studio": "npm run prisma:studio --workspace=apps/api",
+    "test:db:up": "docker compose -f docker-compose.test.yml up -d --wait",
+    "test:db:migrate": "npm run test:db:migrate --workspace=apps/api",
+    "test:integration": "npm run test:integration --workspace=apps/api",
+    "test:db:down": "docker compose -f docker-compose.test.yml down -v"
   }
 }

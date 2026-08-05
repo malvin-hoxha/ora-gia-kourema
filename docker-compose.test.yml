@@ -1,0 +1,26 @@
+name: oragiakourema-test
+
+services:
+  postgres-test:
+    image: postgres:17-alpine
+    container_name: oragiakourema-postgres-test
+    environment:
+      POSTGRES_USER: oragiakourema_test
+      POSTGRES_PASSWORD: oragiakourema_test
+      POSTGRES_DB: oragiakourema_test
+    ports:
+      - "5433:5432"
+    volumes:
+      - oragiakourema_postgres_test_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U oragiakourema_test -d oragiakourema_test"
+        ]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+
+volumes:
+  oragiakourema_postgres_test_data:

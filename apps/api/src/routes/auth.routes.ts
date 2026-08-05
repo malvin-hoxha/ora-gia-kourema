@@ -454,6 +454,15 @@ authRouter.post("/google/link", googleAccountLinkRateLimiter, async (req, res) =
         return;
       }
 
+      const authenticatedUser: AuthenticatedUser = {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        createdAt: user.createdAt,
+      };
+
       const existingGoogleAccount = user.authAccounts[0];
 
       if (existingGoogleAccount) {
@@ -464,7 +473,7 @@ authRouter.post("/google/link", googleAccountLinkRateLimiter, async (req, res) =
         if (
           existingGoogleAccount.providerAccountId === googleIdentity.providerAccountId
         ) {
-          await completeAuthentication( req, res, user, "Google account is already connected", );
+          await completeAuthentication( req, res, authenticatedUser, "Google account is already connected", );
 
           return;
         }
@@ -516,7 +525,7 @@ authRouter.post("/google/link", googleAccountLinkRateLimiter, async (req, res) =
         },
       });
 
-      await completeAuthentication( req, res, user, "Google account connected successfully", );
+      await completeAuthentication( req, res, authenticatedUser, "Google account connected successfully", );
     } catch (error) {
       if ( error instanceof GoogleCredentialError ) {
         res.status(401).json({ message: error.message, });

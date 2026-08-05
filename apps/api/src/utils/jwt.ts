@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import {
   jwtVerify,
   errors as joseErrors,
@@ -73,6 +74,7 @@ export async function signRefreshToken(input: {
       alg: "HS256",
     })
     .setSubject(input.userId)
+    .setJti(crypto.randomUUID())
     .setIssuedAt()
     .setExpirationTime(
       `${env.REFRESH_TOKEN_EXPIRES_DAYS}d`,
