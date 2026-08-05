@@ -1,6 +1,6 @@
 import argon2 from "argon2";
 import request from "supertest";
-import { afterAll, afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { app } from "../../src/app.js";
 import {
   ACCESS_TOKEN_COOKIE,
@@ -8,43 +8,23 @@ import {
 } from "../../src/constants/auth.constants.js";
 import { createRegistrationInput } from "../helpers/factories.js";
 import {
-  cleanupRegistrationUser,
-  disconnectTestDatabase,
+  extractCookieValue,
+  findCookie,
+  getSetCookies,
+} from "../helpers/cookies.js";
+import {
+  cleanupAuthData,
   prisma,
 } from "../setup/database.js";
-
-function findCookie(
-  setCookies: string[],
-  cookieName: string,
-) {
-  return setCookies.find((cookie) =>
-    cookie.startsWith(`${cookieName}=`),
-  );
-}
-
-function extractCookieValue(cookie: string) {
-  const firstSegment = cookie.split(";", 1)[0];
-  const separatorIndex = firstSegment?.indexOf("=") ?? -1;
-
-  if (!firstSegment || separatorIndex < 0) {
-    throw new Error("Response contained a malformed authentication cookie");
-  }
-
-  return decodeURIComponent(firstSegment.slice(separatorIndex + 1));
-}
 
 describe("POST /api/auth/register", () => {
   let registeredEmail: string | undefined;
 
   afterEach(async () => {
     if (registeredEmail) {
-      await cleanupRegistrationUser(registeredEmail);
+      await cleanupAuthData(registeredEmail);
       registeredEmail = undefined;
     }
-  });
-
-  afterAll(async () => {
-    await disconnectTestDatabase();
   });
 
   it("creates a customer and authenticated session", async () => {
@@ -64,17 +44,7 @@ describe("POST /api/auth/register", () => {
     });
     expect(response.body.data.user).not.toHaveProperty("passwordHash");
 
-    const rawSetCookies: unknown =
-      response.headers["set-cookie"];
-
-    const setCookies = Array.isArray(rawSetCookies)
-      ? rawSetCookies.filter(
-          (cookie): cookie is string =>
-            typeof cookie === "string",
-        )
-      : typeof rawSetCookies === "string"
-        ? [rawSetCookies]
-        : [];
+    const setCookies = getSetCookies(response.headers);
 
     expect(setCookies.length).toBeGreaterThan(0);
 
