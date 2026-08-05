@@ -21,3 +21,15 @@ export function createPasswordUserInput(
     password: TEST_PASSWORD,
   };
 }
+
+export function createGoogleIdentity(
+  prefix = "google",
+) {
+  const uniqueId = crypto.randomUUID();
+
+  return {
+    providerAccountId: `${prefix}-${uniqueId}`,
+    email: `${prefix}-${uniqueId}@example.test`,
+    name: "Integration Google User",
+  };
+}
