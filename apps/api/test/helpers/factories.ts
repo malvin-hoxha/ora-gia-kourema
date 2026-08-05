@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { DateTime } from "luxon";
 
 export const TEST_PASSWORD = "Phase2TestPassword123";
 
@@ -32,4 +33,20 @@ export function createGoogleIdentity(
     email: `${prefix}-${uniqueId}@example.test`,
     name: "Integration Google User",
   };
+}
+
+export function createFutureAppointmentDateTime() {
+  const timeZone =
+    process.env.BARBERSHOP_TIME_ZONE ?? "Europe/Athens";
+  const startsAt = DateTime.now()
+    .setZone(timeZone)
+    .plus({ days: 2 })
+    .startOf("day")
+    .set({ hour: 12, minute: 0 });
+
+  if (!startsAt.isValid || !startsAt.toISO()) {
+    throw new Error("Unable to create a future appointment time");
+  }
+
+  return startsAt;
 }
