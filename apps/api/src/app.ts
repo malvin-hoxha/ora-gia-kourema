@@ -14,7 +14,14 @@ import { servicesRouter } from "./routes/service.route.js";
 import { staffRouter } from "./routes/staff.routes.js";
 import { stripeWebhookRouter } from "./routes/stripe-webhook.routes.js";
 
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 export const app = express();
+
+const webDistPath = fileURLToPath(
+  new URL("../../web/dist/", import.meta.url),
+);
 
 app.set("trust proxy", env.TRUST_PROXY);
 
@@ -98,3 +105,13 @@ app.get("/api/health", async (_req, res) => {
     });
   }
 });
+
+if (env.NODE_ENV === "production") {
+  app.use(express.static(webDistPath));
+
+  app.get(/^(?!\/api(?:\/|$)).*/, (_req, res) => {
+    res.sendFile(
+      path.join(webDistPath, "index.html"),
+    );
+  });
+}
