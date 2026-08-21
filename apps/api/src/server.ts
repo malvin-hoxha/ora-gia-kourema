@@ -9,7 +9,7 @@ let shutdownPromise: Promise<void> | undefined;
 
 function listenForRequests() {
   return new Promise<void>((resolve, reject) => {
-    const listeningServer = app.listen(env.PORT);
+    const listeningServer = app.listen( env.PORT, "0.0.0.0" );
     server = listeningServer;
 
     const handleListening = () => {
