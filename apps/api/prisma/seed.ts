@@ -215,8 +215,17 @@ async function seedDemoCustomer() {
 }
 
 async function seedBarberAccounts() {
+  const password = process.env.SEED_BARBER_PASSWORD;
+
+  if (!password) {
+    console.log(
+      "Skipping barber accounts: SEED_BARBER_PASSWORD is not configured.",
+    );
+    return;
+  }
+
   const passwordHash = await argon2.hash(
-    "Barber123",
+    password,
     {
       type: argon2.argon2id,
     },
@@ -267,8 +276,17 @@ async function seedBarberAccounts() {
 }
 
 async function seedAdminAccount() {
+  const password = process.env.SEED_ADMIN_PASSWORD;
+
+  if (!password) {
+    console.log(
+      "Skipping admin account: SEED_ADMIN_PASSWORD is not configured.",
+    );
+    return;
+  }
+
   const passwordHash = await argon2.hash(
-    "Admin123!",
+    password,
     {
       type: argon2.argon2id,
     },
