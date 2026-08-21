@@ -62,7 +62,45 @@ const corsOptions: CorsOptions = {
   maxAge: 600,
 };
 
-app.use(helmet());
+app.use(
+  helmet({
+    crossOriginOpenerPolicy: {
+      policy: "same-origin-allow-popups",
+    },
+
+    contentSecurityPolicy: {
+      directives: {
+        "script-src": [
+          "'self'",
+          "https://accounts.google.com/gsi/client",
+        ],
+
+        "frame-src": [
+          "'self'",
+          "https://accounts.google.com/gsi/",
+        ],
+
+        "connect-src": [
+          "'self'",
+          "https://accounts.google.com/gsi/",
+        ],
+
+        "style-src": [
+          "'self'",
+          "'unsafe-inline'",
+          "https://accounts.google.com/gsi/style",
+        ],
+
+        "img-src": [
+          "'self'",
+          "data:",
+          "https:",
+        ],
+      },
+    },
+  }),
+);
+
 app.use(cors(corsOptions));
 
 /*
