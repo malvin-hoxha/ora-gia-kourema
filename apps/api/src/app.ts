@@ -89,6 +89,12 @@ app.use(
           "'self'",
           "'unsafe-inline'",
           "https://accounts.google.com/gsi/style",
+          "https://fonts.googleapis.com",
+        ],
+
+        "font-src": [
+          "'self'",
+          "https://fonts.gstatic.com",
         ],
 
         "img-src": [
