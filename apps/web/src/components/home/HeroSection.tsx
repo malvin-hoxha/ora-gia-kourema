@@ -1,7 +1,29 @@
 import { ArrowRightIcon, CalendarDaysIcon, ClockIcon } from "lucide-react";
 import { Link } from "react-router-dom";
+import { useAuth } from "../../auth/useAuth";
 
 export function HeroSection() {
+  const { user } = useAuth();
+
+  const primaryCta =
+    user?.role === "ADMIN"
+      ? {
+          to: "/admin",
+          desktopLabel: "Άνοιγμα admin panel",
+          mobileLabel: "Admin",
+        }
+      : user?.role === "BARBER"
+        ? {
+            to: "/staff",
+            desktopLabel: "Άνοιγμα staff panel",
+            mobileLabel: "Staff",
+          }
+        : {
+            to: "/booking",
+            desktopLabel: "Κλείσε ραντεβού",
+            mobileLabel: "Ραντεβού",
+          };
+
   const stats = [
     {
       value: "4.9",
@@ -58,10 +80,11 @@ export function HeroSection() {
         {/* CTAs */}
         <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Link
-            to="/booking"
-            className="..."
+            to={primaryCta.to}
+            className="whitespace-nowrap rounded-full bg-orange-500 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-orange-600 hover:shadow-md hover:shadow-orange-200 sm:px-4 sm:text-sm"
           >
-            Κλείσε ραντεβού
+            <span className="sm:hidden">{primaryCta.mobileLabel}</span>
+            <span className="hidden sm:inline">{primaryCta.desktopLabel}</span>
           </Link>
 
           <a
