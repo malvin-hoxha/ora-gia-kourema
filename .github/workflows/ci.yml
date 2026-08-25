@@ -57,6 +57,9 @@ jobs:
       - name: Migrate test database
         run: npm run test:db:migrate
 
+      - name: Generate Prisma client
+        run: npm run prisma:generate --workspace=apps/api
+
       - name: API typecheck
         run: npm run typecheck --workspace=apps/api
 
