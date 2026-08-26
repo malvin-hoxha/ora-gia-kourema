@@ -199,13 +199,13 @@ export function HeroSection() {
                     Κλείσε το επόμενο διαθέσιμο ραντεβού γρήγορα και εύκολα.
                   </p>
 
-                  <a
-                    href="#booking"
+                  <Link
+                    to={primaryCta.to}
                     className="mt-7 inline-flex w-full items-center justify-center gap-2 rounded-full bg-slate-900 px-6 py-3.5 text-sm font-semibold text-white transition hover:bg-slate-800"
                   >
                     Έλεγχος διαθεσιμότητας
                     <ArrowRightIcon className="size-4" />
-                  </a>
+                  </Link>
                 </div>
               </div>
             </div>
