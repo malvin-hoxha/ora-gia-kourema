@@ -195,6 +195,8 @@ The seed script creates demo services, barbers, working hours, and sample data. 
 
 Those values are intentionally not committed or published.
 
+Remote seeding warning: The seed script uses the active `DATABASE_URL`. If `DATABASE_URL` points to the Neon/live demo database, running the seed can refresh demo data and reset seeded barber service links and working hours. Run it against a remote database only when that is intended.
+
 ## Monorepo Structure
 
 ```text
