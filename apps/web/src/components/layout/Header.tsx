@@ -70,14 +70,14 @@ export function Header() {
             <>
               <Link
                 to={accountPath}
-                className="hidden items-center gap-2 rounded-full border border-black/[0.06]
-                 bg-white px-3 py-2 transition hover:border-orange-100 hover:bg-orange-50 sm:flex"
+                className="flex items-center gap-2 rounded-full border border-black/[0.06] bg-white p-2 transition hover:border-orange-100 hover:bg-orange-50 sm:px-3 sm:py-2"
+                aria-label="Άνοιγμα λογαριασμού"
               >
                 <div className="flex size-7 items-center justify-center rounded-full bg-orange-50 text-orange-500">
                   <UserRoundIcon className="size-3.5" />
                 </div>
 
-                <span className="max-w-32 truncate text-sm font-medium text-slate-700">
+                <span className="hidden max-w-32 truncate text-sm font-medium text-slate-700 sm:inline">
                   {user.name}
                 </span>
               </Link>
@@ -99,7 +99,7 @@ export function Header() {
           {user && (user.role !== "ADMIN" && user.role !== "BARBER") && (
             <Link
               to="/booking"
-              className="rounded-full bg-orange-500 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-orange-600 hover:shadow-md hover:shadow-orange-200"
+              className="hidden rounded-full bg-orange-500 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-orange-600 hover:shadow-md hover:shadow-orange-200 sm:inline-flex"
             >
               Κλείσε ραντεβού
             </Link>
