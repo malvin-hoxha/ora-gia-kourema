@@ -29,5 +29,5 @@ apps/*/.env
 apps/*/.env.local
 apps/api/src/generated/prisma
 
-.agents/
+
 skills-lock.json
