@@ -26,6 +26,36 @@ The main customer booking flow is deployed and working:
 
 Google OAuth is implemented in the codebase, but final public Google Console configuration is still pending.
 
+This is a portfolio demo, not a production SaaS product. Public users can test the customer booking flow; staff/admin credentials are intentionally not published.
+
+## Screenshots
+
+### Homepage
+
+![Homepage](docs/screenshots/homepage.png)
+
+### Mobile Homepage
+
+![Mobile homepage](docs/screenshots/mobile-homepage.png)
+
+### Booking Flow
+
+![Booking service selection](docs/screenshots/booking-service-selection.png)
+
+![Booking availability](docs/screenshots/booking-availability.png)
+
+### Stripe Payment Success
+
+![Payment success](docs/screenshots/payment-success.png)
+
+### Staff Dashboard
+
+![Staff dashboard](docs/screenshots/staff-dashboard.png)
+
+### Admin Dashboard
+
+![Admin dashboard](docs/screenshots/admin-dashboard.png)
+
 ## Tech Stack
 
 ### Frontend
@@ -116,6 +146,19 @@ In the live portfolio deployment, email sending is currently disabled with:
 EMAIL_ENABLED=false
 ```
 
+## How It Works
+
+Customer booking flow:
+
+1. The user registers or logs in.
+2. The user selects a service.
+3. The user selects a barber.
+4. The user selects a date and available time slot.
+5. The API calculates availability from working hours, time off, service duration, and existing appointments.
+6. The appointment is created.
+7. The user can pay at the store or through Stripe Checkout in test mode.
+8. Stripe webhooks update payment and appointment state after checkout events.
+
 ## Architecture
 
 The portfolio deployment uses a same-origin setup:
@@ -141,6 +184,17 @@ React Router direct URLs are handled through a production SPA fallback, while `/
 
 This same-origin setup keeps authentication cookies simple and avoids cross-site cookie issues between separate frontend and backend domains.
 
+## Database and Seeding
+
+Prisma models the core booking domain: users, sessions, barbers, services, working hours, time off, appointments, and payment state.
+
+The seed script creates demo services, barbers, working hours, and sample data. Optional barber/admin seed accounts can be created by setting:
+
+- `SEED_BARBER_PASSWORD`
+- `SEED_ADMIN_PASSWORD`
+
+Those values are intentionally not committed or published.
+
 ## Monorepo Structure
 
 ```text
@@ -153,6 +207,8 @@ This same-origin setup keeps authentication cookies simple and avoids cross-site
 │   └── web
 │       ├── src
 │       └── test
+├── docs
+│   └── screenshots
 ├── docker-compose.yml
 ├── docker-compose.test.yml
 ├── package.json
@@ -331,6 +387,9 @@ EMAIL_ENABLED=false
 EMAIL_PROVIDER=console
 EMAIL_FROM_NAME=OraGiaKourema
 EMAIL_FROM_ADDRESS=appointments@example.com
+
+SEED_BARBER_PASSWORD=
+SEED_ADMIN_PASSWORD=
 ```
 
 ### Frontend
@@ -350,12 +409,15 @@ VITE_GOOGLE_CLIENT_ID=
 - Stripe webhooks are verified with a signing secret.
 - Production cookies use `Secure` and `SameSite=Lax` in the same-origin deployment.
 - Real secrets are not committed to the repository.
+- Staff/admin credentials are not published publicly.
 
 ## Known Limitations
 
 - Google OAuth is implemented, but final public Google Console configuration is still pending.
 - Email sending is disabled in the live portfolio deployment.
 - The live demo runs on free-tier infrastructure, so cold starts may occur after inactivity.
+- Staff/admin demo credentials are intentionally not published.
+- Stripe is configured for test-mode demonstration, not live payments.
 
 ## Author
 
